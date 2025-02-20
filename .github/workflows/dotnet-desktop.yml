@@ -28,11 +28,16 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore dependencies
-        run: dotnet restore $env:Solution_Name
+      - name: Setup MSBuild.exe
+        uses: microsoft/setup-msbuild@v2
 
-      - name: Build the solution
-        run: dotnet build $env:Solution_Name --configuration ${{ matrix.configuration }}
+      - name: Restore dependencies using MSBuild
+        run: msbuild $env:Solution_Name /t:Restore /p:Configuration=${{ matrix.configuration }}
+        shell: pwsh
+
+      - name: Build the solution using MSBuild
+        run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }}
+        shell: pwsh
 
       - name: Sign the Executable (Release only)
         if: ${{ matrix.configuration == 'Release' }}
@@ -44,7 +49,7 @@ jobs:
           [System.IO.File]::WriteAllBytes($certPath, $pfxBytes)
           
           Write-Host "Locating the executable..."
-          $exePath = "$(Build.SourcesDirectory)\bin\Release\NormalSmith.exe"
+          $exePath = "$(Build.SourcesDirectory)\NormalSmith\bin\Release\NormalSmith.exe"
           if (-Not (Test-Path $exePath)) {
             Write-Error "Executable not found at path: $exePath"
             exit 1
