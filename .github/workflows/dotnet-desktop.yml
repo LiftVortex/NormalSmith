@@ -36,8 +36,9 @@ jobs:
         shell: pwsh
 
       - name: Build the solution using MSBuild
-        run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }}
+        run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }} /p:OutDir="$env:GITHUB_WORKSPACE\build\"
         shell: pwsh
+      
 
       - name: Sign the Executable (Release only)
         if: ${{ matrix.configuration == 'Release' }}
