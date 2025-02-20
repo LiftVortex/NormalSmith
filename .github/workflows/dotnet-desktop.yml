@@ -45,11 +45,11 @@ jobs:
         run: |
           Write-Host "Decoding the signing certificate..."
           $pfxBytes = [System.Convert]::FromBase64String("${{ secrets.BASE64_ENCODED_PFX }}")
-          $certPath = "$(Build.SourcesDirectory)\signingCertificate.pfx"
+          $certPath = "$env:GITHUB_WORKSPACE\signingCertificate.pfx"
           [System.IO.File]::WriteAllBytes($certPath, $pfxBytes)
           
           Write-Host "Locating the executable..."
-          $exePath = "$(Build.SourcesDirectory)\NormalSmith\bin\Release\NormalSmith.exe"
+          $exePath = "$env:GITHUB_WORKSPACE\NormalSmith\bin\Release\NormalSmith.exe"
           if (-Not (Test-Path $exePath)) {
             Write-Error "Executable not found at path: $exePath"
             exit 1
