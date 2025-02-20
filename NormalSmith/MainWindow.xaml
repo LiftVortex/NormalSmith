@@ -1,0 +1,287 @@
+﻿<Window x:Class="NormalSmith.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:NormalSmith"
+        mc:Ignorable="d"
+        Title="NormalSmith - Map Baker" Height="1920" Width="1080"
+        Background="{DynamicResource WindowBackgroundBrush}">
+    <Window.TaskbarItemInfo>
+        <TaskbarItemInfo x:Name="taskbarInfo" />
+    </Window.TaskbarItemInfo>
+    <Window.Resources>
+        <!-- Dynamic Resource Definitions for Light Theme (Default) -->
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F3F3F3" />
+        <SolidColorBrush x:Key="MenuBackgroundBrush" Color="#F3F3F3" />
+        <SolidColorBrush x:Key="ControlBackgroundBrush" Color="White" />
+        <SolidColorBrush x:Key="ControlForegroundBrush" Color="Black" />
+        <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#0078D7" />
+        <SolidColorBrush x:Key="ButtonForegroundBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="ButtonHoverBackgroundBrush" Color="#005A9E" />
+        <SolidColorBrush x:Key="ButtonPressedBackgroundBrush" Color="#004578" />
+        <SolidColorBrush x:Key="GroupBoxBorderBrush" Color="#DDDDDD" />
+        <SolidColorBrush x:Key="GroupBoxHeaderForegroundBrush" Color="#0078D7" />
+        <SolidColorBrush x:Key="TextBoxBackgroundBrush" Color="White" />
+        <SolidColorBrush x:Key="TextBoxForegroundBrush" Color="Black" />
+        <SolidColorBrush x:Key="TextBoxBorderBrush" Color="#CCCCCC" />
+
+        <!-- Default TextBlock Style -->
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+
+        <!-- MenuItem Style -->
+        <Style TargetType="MenuItem">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+
+        <!-- Modern Button Style -->
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundBrush}" />
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ButtonPressedBackgroundBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Background" Value="#CCC" />
+                                <Setter Property="Foreground" Value="#888" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern CheckBox Style -->
+        <Style TargetType="CheckBox">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal">
+                            <Border x:Name="CheckBoxBorder" Width="16" Height="16" CornerRadius="3" BorderThickness="1" 
+                                    BorderBrush="{DynamicResource ButtonBackgroundBrush}" Background="{DynamicResource ControlBackgroundBrush}">
+                                <Path x:Name="CheckMark" Data="M 2 8 L 6 12 L 14 4" Stroke="{DynamicResource ButtonBackgroundBrush}" StrokeThickness="2" Visibility="Collapsed" />
+                            </Border>
+                            <ContentPresenter Margin="5,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="CheckBoxBorder" Property="Background" Value="#E5F1FB" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CheckBoxBorder" Property="BorderBrush" Value="{DynamicResource ButtonHoverBackgroundBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="CheckBoxBorder" Property="Background" Value="#EEE" />
+                                <Setter Property="Foreground" Value="#888" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern TextBox Style -->
+        <Style TargetType="TextBox">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Padding" Value="4" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TextBoxBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource TextBoxBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBoxForegroundBrush}" />
+            <Setter Property="Height" Value="30" />
+        </Style>
+
+        <!-- Modern GroupBox Style -->
+        <Style TargetType="GroupBox">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupBox">
+                        <Border BorderBrush="{DynamicResource GroupBoxBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10" Background="{DynamicResource ControlBackgroundBrush}">
+                            <DockPanel>
+                                <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" 
+                                           Foreground="{DynamicResource GroupBoxHeaderForegroundBrush}" 
+                                           DockPanel.Dock="Top" Margin="0,0,0,5" />
+                                <ContentPresenter />
+                            </DockPanel>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Preview Border Style -->
+        <Style x:Key="PreviewBorderStyle" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource GroupBoxBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+            <Setter Property="Margin" Value="10" />
+        </Style>
+    </Window.Resources>
+
+    <!-- Root Layout with Top Menu -->
+    <DockPanel>
+        <!-- Top Menu with Dark Mode Toggle -->
+        <Menu DockPanel.Dock="Top" Background="{DynamicResource MenuBackgroundBrush}">
+            <MenuItem Header="Options" Foreground="{DynamicResource ButtonForegroundBrush}">
+                <MenuItem x:Name="menuDarkModeToggle" Header="Dark Mode" IsCheckable="True" Click="menuDarkModeToggle_Click" Foreground="Black"/>
+                <MenuItem Header="Set Highlight Color" Click="menuSetHighlightColor_Click" Foreground="Black"/>
+                <MenuItem x:Name="chkFastPreview" Header="Fast Preview (50ms)" IsCheckable="True" Click="fastPreviewModeToggle_Click" Foreground="Black"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Main UI Layout -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="40" />
+                </Grid.RowDefinitions>
+                <!-- Left Panel with Controls -->
+            <ScrollViewer Grid.Column="0" Grid.Row="0" Margin="10" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <!-- Input Files Section -->
+                    <GroupBox Header="Input Files" Margin="0,0,0,10">
+                        <StackPanel Margin="5">
+                            <Button Name="btnLoadModel" Content="Load Model" Click="btnLoadModel_Click" Margin="0,0,0,5" />
+                            <TextBlock Name="txtModelPath" Text="No model loaded" TextWrapping="Wrap" Margin="0,0,0,10" />
+                            <!-- Mesh Selection -->
+                            <GroupBox Header="Mesh Selection" Margin="0,0,0,10">
+                                <StackPanel Margin="5">
+                                    <ComboBox Name="cmbMeshSelection" Width="250" SelectionChanged="cmbMeshSelection_SelectionChanged"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <Button Name="btnLoadAlphaTexture" Content="Load Alpha Texture" Click="btnLoadAlphaTexture_Click" Margin="0,0,0,5" />
+                            <TextBlock Name="txtAlphaPath" Text="No alpha texture loaded" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- Output Settings Section -->
+                    <GroupBox Header="Output Settings" Margin="0,0,0,10">
+                        <StackPanel Margin="5">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                <TextBlock Text="Texture Width:" VerticalAlignment="Center" Width="110" />
+                                <TextBox Name="txtWidth" Width="50" Text="1024" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Texture Height:" VerticalAlignment="Center" Width="110" />
+                                <TextBox Name="txtHeight" Width="50" Text="1024" />
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- UV Mapping Options Section -->
+                    <GroupBox Header="UV Mapping Options" Margin="0,0,0,10">
+                        <StackPanel Margin="5">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                <TextBlock Text="Bent Normal/Occlusion Map UV:" VerticalAlignment="Center" Width="180"/>
+                                <ComboBox Name="cmbBentMapUV" Width="100"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Alpha Map UV:" VerticalAlignment="Center" Width="180"/>
+                                <ComboBox Name="cmbAlphaMapUV" Width="100"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- Map Generation Options Section with Sub-Categories -->
+                    <GroupBox Header="Map Generation Options" Margin="0,0,0,10">
+                        <StackPanel Margin="5">
+                            <!-- Map Types -->
+                            <TextBlock Text="Map Types" FontWeight="Bold" Margin="0,0,0,5" />
+                            <StackPanel Orientation="Vertical" Margin="10,0,0,5">
+                                <CheckBox Name="chkGenerateBentNormal" Content="Generate Bent Normal Map" IsChecked="True" Margin="0,0,0,5" />
+                                <CheckBox Name="chkGenerateOcclusion" Content="Generate Occlusion Map" IsChecked="True" Margin="0,0,0,5" />
+                            </StackPanel>
+
+                            <!-- Sampling Options -->
+                            <TextBlock Text="Sampling Options" FontWeight="Bold" Margin="0,10,0,5" />
+                            <StackPanel Orientation="Vertical" Margin="10,0,0,5">
+                                <CheckBox Name="chkTangentSpace" Content="Use Tangent Space" IsChecked="True" Margin="0,0,0,5" />
+                                <CheckBox Name="chkCosineDistribution" Content="Use Cosine Distribution" IsChecked="True" Margin="0,0,0,5" />
+                                <CheckBox Name="chkEnhancedTangentProcessing" Content="Enhanced Tangent Processing" IsChecked="True" Margin="0,0,0,5" />
+                                <CheckBox Name="chkClampOcclusion" Content="Clamp Occlusion To Threshold" IsChecked="True" Margin="0,0,0,5" />
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- Swizzle Options Section -->
+                    <GroupBox Header="Swizzle Options" Margin="0,0,0,10">
+                        <StackPanel Orientation="Horizontal" Margin="5">
+                            <CheckBox Name="chkInvertX" Content="Invert X" IsChecked="False" Margin="0,0,10,0" />
+                            <CheckBox Name="chkInvertY" Content="Invert Y" IsChecked="True" Margin="0,0,10,0" />
+                            <CheckBox Name="chkInvertZ" Content="Invert Z" IsChecked="False" />
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- Baking Options Section -->
+                    <GroupBox Header="Baking Options" Margin="0,0,0,10">
+                        <StackPanel Margin="5">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                <TextBlock Text="Ray Sample Count:" VerticalAlignment="Center" Width="140" />
+                                <TextBox Name="txtRaySampleCount" Width="50" Text="64" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                <TextBlock Text="Max Ray Distance:" VerticalAlignment="Center" Width="140" />
+                                <TextBox Name="txtMaxRayDistance" Width="50" Text="1000" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                <TextBlock Text="Occlusion Threshold:" VerticalAlignment="Center" Width="140" />
+                                <TextBox Name="txtOcclusionThreshold" Width="50" Text="0.726" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Ray Origin Bias:" VerticalAlignment="Center" Width="140" />
+                                <TextBox Name="txtRayOriginBias" Width="50" Text="0.01" />
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Action Button -->
+            <Button Grid.Column="0" Grid.Row="1" Name="btnBake" Content="Bake Maps" Click="btnBake_Click" Margin="10,0,10,10" Height="30" VerticalAlignment="Bottom"/>
+
+            </Grid>
+            <!-- Right Panel for Preview -->
+            <Border Grid.Column="1" Style="{StaticResource PreviewBorderStyle}">
+                <Viewbox Stretch="Uniform">
+                    <Image Name="imgPreview" />
+                </Viewbox>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>

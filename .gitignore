@@ -3,6 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# WPF-specific files
+bin/
+obj/
+
 # User-specific files
 *.rsuser
 *.suo
@@ -398,3 +402,15 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+*.bak
+*.cache
+*.dll
+*.exe
+*.ide
+.idea/
+.vscode/
+Desktop.ini
+Thumbs.db
+packages/
+project.assets.json
