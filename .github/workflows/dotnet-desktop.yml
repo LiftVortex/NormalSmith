@@ -32,13 +32,12 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Restore dependencies using MSBuild
-        run: msbuild $env:Solution_Name /t:Restore /p:Configuration=${{ matrix.configuration }}
+        run: msbuild $env:Solution_Name /t:Restore /p:Configuration=${{ matrix.configuration }} /p:UseSharedCompilation=false /p:OutDir="$env:GITHUB_WORKSPACE\build\"
         shell: pwsh
 
       - name: Build the solution using MSBuild
-        run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }} /p:OutDir="$env:GITHUB_WORKSPACE\build\"
+        run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }} /p:UseSharedCompilation=false /p:OutDir="$env:GITHUB_WORKSPACE\build\"
         shell: pwsh
-      
 
       - name: Sign the Executable (Release only)
         if: ${{ matrix.configuration == 'Release' }}
@@ -49,8 +48,11 @@ jobs:
           $certPath = "$env:GITHUB_WORKSPACE\signingCertificate.pfx"
           [System.IO.File]::WriteAllBytes($certPath, $pfxBytes)
           
+          Write-Host "Listing output directory contents for debugging..."
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse
+
           Write-Host "Locating the executable..."
-          $exePath = "$env:GITHUB_WORKSPACE\NormalSmith\bin\Release\NormalSmith.exe"
+          $exePath = "$env:GITHUB_WORKSPACE\build\NormalSmith.exe"
           if (-Not (Test-Path $exePath)) {
             Write-Error "Executable not found at path: $exePath"
             exit 1
