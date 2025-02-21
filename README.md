@@ -1,5 +1,10 @@
 # Normal Smith
 
+## Screenshots / Demo
+
+![Main UI](https://github.com/user-attachments/assets/344b2c02-fe39-4b44-a75d-da1121e015b0)  
+*Example of the Normal Smith main interface with a loaded model and live preview when baking a bent normal texture.*
+
 ## Overview / Introduction
 
 Normal Smith is a Windows Presentation Foundation (WPF) application written in C# designed to bake lighting-related texture maps—specifically bent normal maps and ambient occlusion maps—from 3D models. Using the Assimp library for model importing, the application processes 3D mesh data, computes per-pixel lighting information through ray-casting techniques, and outputs texture maps that can be used in game development and real-time rendering workflows.
@@ -33,12 +38,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 - **Persistent Settings:**  
   Remembers user preferences, including texture dimensions, recent folders, and map generation options between sessions.
 
-## Screenshots / Demo
-
-![Main UI](https://github.com/user-attachments/assets/344b2c02-fe39-4b44-a75d-da1121e015b0)  
-*Example of the Normal Smith main interface with a loaded model and live preview when baking a bent normal texture.*
-
-## Getting Started
+## Build: Getting Started
 
 ### Prerequisites
 
@@ -66,10 +66,10 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 3. **Restore NuGet Packages:**  
   Visual Studio should automatically restore NuGet packages (including AssimpNet).
 
-## Usage / How to Use
+## How to Use
 
 1. **Launch the Application:**  
-   Run the project from Visual Studio or execute the compiled binary.
+   Either run the project source code from Visual Studio or download the compiled Windows executable available in ![releases](https://github.com/LiftVortex/NormalSmith/releases/latest)  .
 
 2. **Load a 3D Model:**  
    Click the **Load Model** button to select a 3D model file (e.g., `.fbx`, `.obj`, etc.). The application will import the model and populate the mesh selection dropdown.
@@ -91,7 +91,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 
 ## Configuration / Settings
 
-The application offers various configuration options:
+The application offers various configuration options, please read the ![Wiki](https://github.com/LiftVortex/NormalSmith/wiki/Normal-Smith-Options) page for more details:
 
 - **Texture Dimensions:**  
   Set the width and height of the output texture.
