@@ -1,6 +1,6 @@
 # Normal Smith
 
-## Screenshots / Demo
+## Screenshot
 
 ![Main UI](https://github.com/user-attachments/assets/344b2c02-fe39-4b44-a75d-da1121e015b0)  
 *Example of the Normal Smith main interface with a loaded model and live preview when baking a bent normal texture.*
