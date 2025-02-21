@@ -20,7 +20,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 - **Bent Normal Map & Ambient Occlusion Baking:**  
   Uses ray-casting from each pixel on the UV space to compute ambient occlusion and bent normal directions.
 
-- **Customizable Sampling Options:**  
+- **Customisable Sampling Options:**  
   Configure ray sample count, maximum ray distance, occlusion threshold, and ray origin bias. Options for cosine-weighted sampling and enhanced tangent processing are available.
 
 - **Efficient BVH Acceleration Structure:**  
@@ -32,8 +32,8 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 - **Real-Time Preview & Progress Updates:**  
   Displays a live preview of the baking process with progress information and estimated time remaining.
 
-- **User Interface Customization:**  
-  Toggle between light and dark modes, adjust highlight colors, and enable fast preview for more responsive updates.
+- **User Interface Customisation:**  
+  Toggle between light and dark modes, adjust highlight colours, and enable fast preview for more responsive updates.
 
 - **Persistent Settings:**  
   Remembers user preferences, including texture dimensions, recent folders, and map generation options between sessions.
@@ -41,7 +41,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 ## How to Use
 
 1. **Launch the Application:**  
-   Either run the project source code from Visual Studio or download the compiled Windows executable available in ![releases](https://github.com/LiftVortex/NormalSmith/releases/latest)  .
+   Either run the project source code from Visual Studio or download the compiled Windows executable available in ![releases](https://github.com/LiftVortex/NormalSmith/releases/latest).
 
 2. **Load a 3D Model:**  
    Click the **Load Model** button to select a 3D model file (e.g., `.fbx`, `.obj`, etc.). The application will import the model and populate the mesh selection dropdown.
@@ -75,18 +75,19 @@ The application offers various configuration options, please read the ![Wiki](ht
   Enable or disable tangent space transformation, cosine distribution, and enhanced tangent processing.
 
 - **Swizzle Options:**  
-  Invert X, Y, or Z channels in the final color output.
+  Invert X, Y, or Z channels in the final colour output.
 
 - **Preview Options:**  
   Toggle fast preview mode for more responsive live updates.
 
-- **UI Customization:**  
-  Toggle dark mode and set highlight colors through the menu options.
+- **UI Customisation:**  
+  Toggle dark mode and set highlight colours through the menu options.
 
 User settings are saved automatically between sessions.
 
 ## Troubleshooting
-If you are having issue, please check the ![Troubleshooting](https://github.com/LiftVortex/NormalSmith/wiki/Troubleshooting) page first before submitting an issue on github.
+
+If you are having issues, please check the ![Troubleshooting](https://github.com/LiftVortex/NormalSmith/wiki/Troubleshooting) page first before submitting an issue on GitHub.
 
 ## Building from Source
 ### Prerequisites
