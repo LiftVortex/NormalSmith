@@ -1,8 +1,10 @@
-name: .NET Desktop CI
+name: .NET Desktop CI and Release
 
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ "main" ]
 
@@ -12,13 +14,10 @@ jobs:
       matrix:
         configuration: [ Debug, Release ]
     runs-on: windows-latest
-
     env:
-      # Replace with your actual solution file name.
       Solution_Name: NormalSmith.sln
-
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -50,7 +49,7 @@ jobs:
           
           Write-Host "Listing output directory contents for debugging..."
           Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse
-
+          
           Write-Host "Locating the executable..."
           $exePath = "$env:GITHUB_WORKSPACE\build\NormalSmith.exe"
           if (-Not (Test-Path $exePath)) {
@@ -58,8 +57,42 @@ jobs:
             exit 1
           }
           
+          # Add signtool to PATH
+          $signtoolPath = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64"
+          Write-Host "Adding $signtoolPath to PATH"
+          $env:PATH += ";$signtoolPath"
+          
           Write-Host "Signing the executable..."
           signtool sign /f $certPath /p "${{ secrets.PFX_KEY }}" /tr http://timestamp.digicert.com /td sha256 /fd sha256 $exePath
           
           Write-Host "Cleaning up certificate file..."
           Remove-Item -Path $certPath
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          prerelease: true
+          body: "Automatically generated release for version ${{ github.ref }}"
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ env.GITHUB_WORKSPACE }}\build\NormalSmith.exe
+          asset_name: NormalSmith.exe
+          asset_content_type: application/octet-stream
