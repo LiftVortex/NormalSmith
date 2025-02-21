@@ -2,7 +2,6 @@ name: .NET Desktop CI and Release
 
 on:
   push:
-    branches: [ "main" ]
     tags:
       - 'v*'
   pull_request:
@@ -68,12 +67,28 @@ jobs:
           Write-Host "Cleaning up certificate file..."
           Remove-Item -Path $certPath
 
-      - name: Compress build folder (Release only)
+      - name: Prepare release package (Release only)
         if: ${{ matrix.configuration == 'Release' }}
         shell: pwsh
         run: |
-          Write-Host "Compressing the build folder into build.zip..."
-          Compress-Archive -Path "$env:GITHUB_WORKSPACE\build\*" -DestinationPath "$env:GITHUB_WORKSPACE\build.zip"
+          Write-Host "Creating release package folder..."
+          $releaseDir = "$env:GITHUB_WORKSPACE\release-package"
+          New-Item -ItemType Directory -Path $releaseDir | Out-Null
+          # Copy files from the build folder excluding unwanted items
+          Copy-Item "$env:GITHUB_WORKSPACE\build\*" -Destination $releaseDir -Recurse -Exclude "runtimes", "NormalSmith.pdb", "Microsoft.Win32.SystemEvents.dll"
+          Write-Host "Contents of release package folder:"
+          Get-ChildItem -Path $releaseDir -Recurse
+
+      - name: Compress release package (Release only)
+        if: ${{ matrix.configuration == 'Release' }}
+        shell: pwsh
+        run: |
+          Write-Host "Compressing the release package into build.zip..."
+          $releaseDir = "$env:GITHUB_WORKSPACE\release-package"
+          Compress-Archive -Path "$releaseDir\*" -DestinationPath "$env:GITHUB_WORKSPACE\build.zip"
+          Write-Host "Compressed file created at $env:GITHUB_WORKSPACE\build.zip"
+          # Optionally, clean up the temporary folder
+          Remove-Item -Path $releaseDir -Recurse -Force
 
       - name: Upload build artifact (Release only)
         if: ${{ matrix.configuration == 'Release' }}
