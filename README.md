@@ -1,6 +1,6 @@
 # Normal Smith
 
-## Overview / Introduction
+## Overview
 
 Normal Smith is a Windows Presentation Foundation (WPF) application written in C# designed to bake lighting-related texture maps—specifically bent normal maps and ambient occlusion maps—from 3D models. Using the Assimp library for model importing, the application processes 3D mesh data, computes per-pixel lighting information through ray-casting techniques, and outputs texture maps that can be used in game development and real-time rendering workflows.
 
@@ -37,34 +37,6 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 
 - **Persistent Settings:**  
   Remembers user preferences, including texture dimensions, recent folders, and map generation options between sessions.
-
-## Build: Getting Started
-
-### Prerequisites
-
-- **.NET Framework / .NET Core:**  
-  The application is built using C# and WPF, so ensure you have a compatible version of the .NET SDK installed.
-
-- **Visual Studio:**  
-  Recommended for building and debugging the application.
-
-- **AssimpNet Library:**  
-  The project uses Assimp for model importing. Make sure the AssimpNet NuGet package is referenced.
-
-### Installation
-
-1. **Clone the Repository:**  
-    ```
-    git clone https://github.com/LiftVortex/NormalSmith.git
-    cd NormalSmith
-    ```
-
-
-2. **Open the Solution:**  
-  Open NormalSmith.sln in Visual Studio.
-
-3. **Restore NuGet Packages:**  
-  Visual Studio should automatically restore NuGet packages (including AssimpNet).
 
 ## How to Use
 
@@ -113,7 +85,36 @@ The application offers various configuration options, please read the ![Wiki](ht
 
 User settings are saved automatically between sessions.
 
-## Building and Running
+## Troubleshooting
+If you are having issue, please check the ![Troubleshooting](https://github.com/LiftVortex/NormalSmith/wiki/Troubleshooting) page first before submitting an issue on github.
+
+## Building from Source
+### Prerequisites
+
+- **.NET Framework / .NET Core:**  
+  The application is built using C# and WPF, so ensure you have a compatible version of the .NET SDK installed.
+
+- **Visual Studio:**  
+  Recommended for building and debugging the application.
+
+- **AssimpNet Library:**  
+  The project uses Assimp for model importing. Make sure the AssimpNet NuGet package is referenced.
+
+### Installation
+
+1. **Clone the Repository:**  
+    ```
+    git clone https://github.com/LiftVortex/NormalSmith.git
+    cd NormalSmith
+    ```
+
+2. **Open the Solution:**  
+  Open NormalSmith.sln in Visual Studio.
+
+3. **Restore NuGet Packages:**  
+  Visual Studio should automatically restore NuGet packages (including AssimpNet).
+
+### Building and Running
 
 1. **Build the Project:**  
    In Visual Studio, build the solution (`Build > Build Solution`).
