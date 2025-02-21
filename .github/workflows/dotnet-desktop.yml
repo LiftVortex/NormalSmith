@@ -103,7 +103,8 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
-          prerelease: true
+          # If the tag ends with "p", prerelease will be true; otherwise false.
+          prerelease: ${{ endsWith(github.ref, 'p') }}
           body: "Automatically generated release for version ${{ github.ref }}"
 
       - name: Upload Release Asset
