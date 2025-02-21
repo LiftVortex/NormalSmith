@@ -57,7 +57,7 @@ jobs:
             exit 1
           }
           
-          # Add signtool to PATH
+          # Add signtool's directory to the PATH
           $signtoolPath = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64"
           Write-Host "Adding $signtoolPath to PATH"
           $env:PATH += ";$signtoolPath"
@@ -67,6 +67,13 @@ jobs:
           
           Write-Host "Cleaning up certificate file..."
           Remove-Item -Path $certPath
+
+      - name: Compress build folder (Release only)
+        if: ${{ matrix.configuration == 'Release' }}
+        shell: pwsh
+        run: |
+          Write-Host "Compressing the build folder into build.zip..."
+          Compress-Archive -Path "$env:GITHUB_WORKSPACE\build\*" -DestinationPath "$env:GITHUB_WORKSPACE\build.zip"
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
@@ -93,6 +100,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ env.GITHUB_WORKSPACE }}\build\NormalSmith.exe
-          asset_name: NormalSmith.exe
-          asset_content_type: application/octet-stream
+          asset_path: ${{ env.GITHUB_WORKSPACE }}\build.zip
+          asset_name: NormalSmith-Build.zip
+          asset_content_type: application/zip
