@@ -41,7 +41,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 ## How to Use
 
 1. **Launch the Application:**  
-   Either run the project source code from Visual Studio or download the compiled Windows executable available in ![releases](https://github.com/LiftVortex/NormalSmith/releases/latest).
+   Either run the project source code from Visual Studio or download the compiled Windows executable available in [releases](https://github.com/LiftVortex/NormalSmith/releases/latest).
 
 2. **Load a 3D Model:**  
    Click the **Load Model** button to select a 3D model file (e.g., `.fbx`, `.obj`, etc.). The application will import the model and populate the mesh selection dropdown.
@@ -63,7 +63,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 
 ## Configuration / Settings
 
-The application offers various configuration options, please read the ![Wiki](https://github.com/LiftVortex/NormalSmith/wiki/Normal-Smith-Options) page for more details:
+The application offers various configuration options, please read the [Wiki](https://github.com/LiftVortex/NormalSmith/wiki/Normal-Smith-Options) page for more details:
 
 - **Texture Dimensions:**  
   Set the width and height of the output texture.
@@ -87,7 +87,7 @@ User settings are saved automatically between sessions.
 
 ## Troubleshooting
 
-If you are having issues, please check the ![Troubleshooting](https://github.com/LiftVortex/NormalSmith/wiki/Troubleshooting) page first before submitting an issue on GitHub.
+If you are having issues, please check the [Troubleshooting](https://github.com/LiftVortex/NormalSmith/wiki/Troubleshooting) page first before submitting an issue on GitHub.
 
 ## Building from Source
 ### Prerequisites
