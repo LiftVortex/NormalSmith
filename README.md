@@ -12,7 +12,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 ## Features
 
 - **3D Model Importing:**  
-  Supports popular model formats (FBX, OBJ, DAE, 3DS) via the Assimp library (Only tested with FBX).
+  Supports FBX via the Assimp library.
 
 - **Mesh and UV Channel Selection:**  
   Easily select from multiple meshes within a model and choose the appropriate UV channels for baking maps and alpha textures.
@@ -44,7 +44,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
    Download the compiled Windows executable available in [releases](https://github.com/LiftVortex/NormalSmith/releases/latest).
 
 2. **Load a 3D Model:**  
-   Click the **Load Model** button to select a 3D model file (e.g., `.fbx`, `.obj`, etc.). The application will import the model and populate the mesh selection dropdown.
+   Click the **Load Model** button to select a 3D model file (`.fbx`). The application will import the model and populate the mesh selection dropdown.
 
 3. **Select Mesh and UV Channels:**  
    Use the dropdowns to select the desired mesh and choose the UV channels for the bent normal/occlusion map and alpha texture.
