@@ -6,6 +6,7 @@ namespace NormalSmith.HelperFunctions
     public static class BilateralFilter
     {
         /// <summary>
+        /// I've increased the Anti-Aliasing quality, i prefer that look to the BilateralFilter.
         /// Applies a bilateral filter to the input bitmap.
         /// </summary>
         /// <param name="input">The input bitmap (e.g. your baked result).</param>
