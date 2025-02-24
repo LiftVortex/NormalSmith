@@ -1,13 +1,13 @@
-# Normal Smith
+# Normal Smithy
 
 ## Overview
 
-Normal Smith is a Windows Presentation Foundation (WPF) application written in C# designed to bake lighting-related texture maps—specifically bent normal maps and ambient occlusion maps—from 3D models. Using the Assimp library for model importing, the application processes 3D mesh data, computes per-pixel lighting information through ray-casting techniques, and outputs texture maps that can be used in game development and real-time rendering workflows.
+Normal Smithy is a Windows Presentation Foundation (WPF) application written in C# designed to bake lighting-related texture maps—specifically bent normal maps and ambient occlusion maps—from 3D models. Using the Assimp library for model importing, the application processes 3D mesh data, computes per-pixel lighting information through ray-casting techniques, and outputs texture maps that can be used in game development and real-time rendering workflows.
 
 ## Screenshot
 
 ![Main UI](https://github.com/user-attachments/assets/344b2c02-fe39-4b44-a75d-da1121e015b0)  
-*Example of the Normal Smith main interface with a loaded model and live preview when baking a bent normal texture.*
+*Example of the Normal Smithy main interface with a loaded model and live preview when baking a bent normal texture.*
 
 ## Features
 
@@ -150,4 +150,4 @@ This project is licensed under the [MIT License](https://github.com/LiftVortex/N
   Appreciation to the developers and contributors who continue to improve the .NET ecosystem.
 
 - **Inspiration and Contributions:**  
-  Thanks to all contributors and users who provide feedback and help improve Normal Smith.
+  Thanks to all contributors and users who provide feedback and help improve Normal Smithy.
