@@ -1,8 +1,13 @@
 # Normal Smith
 
-## Overview / Introduction
+## Overview
 
 Normal Smith is a Windows Presentation Foundation (WPF) application written in C# designed to bake lighting-related texture maps—specifically bent normal maps and ambient occlusion maps—from 3D models. Using the Assimp library for model importing, the application processes 3D mesh data, computes per-pixel lighting information through ray-casting techniques, and outputs texture maps that can be used in game development and real-time rendering workflows.
+
+## Screenshot
+
+![Main UI](https://github.com/user-attachments/assets/344b2c02-fe39-4b44-a75d-da1121e015b0)  
+*Example of the Normal Smith main interface with a loaded model and live preview when baking a bent normal texture.*
 
 ## Features
 
@@ -15,7 +20,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 - **Bent Normal Map & Ambient Occlusion Baking:**  
   Uses ray-casting from each pixel on the UV space to compute ambient occlusion and bent normal directions.
 
-- **Customizable Sampling Options:**  
+- **Customisable Sampling Options:**  
   Configure ray sample count, maximum ray distance, occlusion threshold, and ray origin bias. Options for cosine-weighted sampling and enhanced tangent processing are available.
 
 - **Efficient BVH Acceleration Structure:**  
@@ -27,49 +32,16 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 - **Real-Time Preview & Progress Updates:**  
   Displays a live preview of the baking process with progress information and estimated time remaining.
 
-- **User Interface Customization:**  
-  Toggle between light and dark modes, adjust highlight colors, and enable fast preview for more responsive updates.
+- **User Interface Customisation:**  
+  Toggle between light and dark modes, adjust highlight colours, and enable fast preview for more responsive updates.
 
 - **Persistent Settings:**  
   Remembers user preferences, including texture dimensions, recent folders, and map generation options between sessions.
 
-## Screenshots / Demo
-
-![Main UI](https://github.com/user-attachments/assets/344b2c02-fe39-4b44-a75d-da1121e015b0)  
-*Example of the Normal Smith main interface with a loaded model and live preview when baking a bent normal texture.*
-
-## Getting Started
-
-### Prerequisites
-
-- **.NET Framework / .NET Core:**  
-  The application is built using C# and WPF, so ensure you have a compatible version of the .NET SDK installed.
-
-- **Visual Studio:**  
-  Recommended for building and debugging the application.
-
-- **AssimpNet Library:**  
-  The project uses Assimp for model importing. Make sure the AssimpNet NuGet package is referenced.
-
-### Installation
-
-1. **Clone the Repository:**  
-    ```
-    git clone https://github.com/LiftVortex/NormalSmith.git
-    cd NormalSmith
-    ```
-
-
-2. **Open the Solution:**  
-  Open NormalSmith.sln in Visual Studio.
-
-3. **Restore NuGet Packages:**  
-  Visual Studio should automatically restore NuGet packages (including AssimpNet).
-
-## Usage / How to Use
+## How to Use
 
 1. **Launch the Application:**  
-   Run the project from Visual Studio or execute the compiled binary.
+   Either run the project source code from Visual Studio or download the compiled Windows executable available in [releases](https://github.com/LiftVortex/NormalSmith/releases/latest).
 
 2. **Load a 3D Model:**  
    Click the **Load Model** button to select a 3D model file (e.g., `.fbx`, `.obj`, etc.). The application will import the model and populate the mesh selection dropdown.
@@ -91,7 +63,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 
 ## Configuration / Settings
 
-The application offers various configuration options:
+The application offers various configuration options, please read the [Wiki](https://github.com/LiftVortex/NormalSmith/wiki/Normal-Smith-Options) page for more details:
 
 - **Texture Dimensions:**  
   Set the width and height of the output texture.
@@ -103,17 +75,47 @@ The application offers various configuration options:
   Enable or disable tangent space transformation, cosine distribution, and enhanced tangent processing.
 
 - **Swizzle Options:**  
-  Invert X, Y, or Z channels in the final color output.
+  Invert X, Y, or Z channels in the final colour output.
 
 - **Preview Options:**  
   Toggle fast preview mode for more responsive live updates.
 
-- **UI Customization:**  
-  Toggle dark mode and set highlight colors through the menu options.
+- **UI Customisation:**  
+  Toggle dark mode and set highlight colours through the menu options.
 
 User settings are saved automatically between sessions.
 
-## Building and Running
+## Troubleshooting
+
+If you are having issues, please check the [Troubleshooting](https://github.com/LiftVortex/NormalSmith/wiki/Troubleshooting) page first before submitting an issue on GitHub.
+
+## Building from Source
+### Prerequisites
+
+- **.NET Framework / .NET Core:**  
+  The application is built using C# and WPF, so ensure you have a compatible version of the .NET SDK installed.
+
+- **Visual Studio:**  
+  Recommended for building and debugging the application.
+
+- **AssimpNet Library:**  
+  The project uses Assimp for model importing. Make sure the AssimpNet NuGet package is referenced.
+
+### Installation
+
+1. **Clone the Repository:**  
+    ```
+    git clone https://github.com/LiftVortex/NormalSmith.git
+    cd NormalSmith
+    ```
+
+2. **Open the Solution:**  
+  Open NormalSmith.sln in Visual Studio.
+
+3. **Restore NuGet Packages:**  
+  Visual Studio should automatically restore NuGet packages (including AssimpNet).
+
+### Building and Running
 
 1. **Build the Project:**  
    In Visual Studio, build the solution (`Build > Build Solution`).
