@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:NormalSmith"
         mc:Ignorable="d"
-        Title="NormalSmith - Map Baker" Height="1920" Width="1080"
+        Title="Normal Smith" Height="1920" Width="1080"
         Background="{DynamicResource WindowBackgroundBrush}">
     <Window.TaskbarItemInfo>
         <TaskbarItemInfo x:Name="taskbarInfo" />
@@ -174,102 +174,136 @@
             <ScrollViewer Grid.Column="0" Grid.Row="0" Margin="10" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <!-- Input Files Section -->
-                    <GroupBox Header="Input Files" Margin="0,0,0,10">
-                        <StackPanel Margin="5">
-                            <Button Name="btnLoadModel" Content="Load Model" Click="btnLoadModel_Click" Margin="0,0,0,5" />
-                            <TextBlock Name="txtModelPath" Text="No model loaded" TextWrapping="Wrap" Margin="0,0,0,10" />
-                            <!-- Mesh Selection -->
-                            <GroupBox Header="Mesh Selection" Margin="0,0,0,10">
-                                <StackPanel Margin="5">
-                                    <ComboBox Name="cmbMeshSelection" Width="250" SelectionChanged="cmbMeshSelection_SelectionChanged"/>
+                        <GroupBox Header="Input Files" Margin="0,0,0,10">
+                            <StackPanel Margin="5">
+                                <Button Name="btnLoadModel" Content="Load Model" Click="btnLoadModel_Click" Margin="0,0,0,5"
+                ToolTip="Click to load or clear a 3D model file (e.g., .fbx, .obj). The model will be imported and prepared for baking."/>
+                                <TextBlock Name="txtModelPath" Text="No model loaded" TextWrapping="Wrap" Margin="0,0,0,10"
+                   ToolTip="Displays the path of the loaded model. If no model is loaded, it will indicate that."/>
+                                <!-- Mesh Selection -->
+                                <GroupBox Header="Mesh Selection" Margin="0,0,0,10"
+                  ToolTip="Select the specific mesh from the loaded model to be baked.">
+                                    <StackPanel Margin="5">
+                                        <ComboBox Name="cmbMeshSelection" Width="250" SelectionChanged="cmbMeshSelection_SelectionChanged"
+                          ToolTip="Choose which mesh from the model to bake. The dropdown is populated after loading the model."/>
+                                    </StackPanel>
+                                </GroupBox>
+                                <Button Name="btnLoadAlphaTexture" Content="Load Alpha Texture" Click="btnLoadAlphaTexture_Click" Margin="0,0,0,5"
+                ToolTip="Click to load or clear an alpha texture file (e.g., .png, .jpg). This texture is used for masking during baking."/>
+                                <TextBlock Name="txtAlphaPath" Text="No alpha texture loaded" TextWrapping="Wrap"
+                   ToolTip="Displays the path of the loaded alpha texture. If no texture is loaded, it will indicate that."/>
+                            </StackPanel>
+                        </GroupBox>
+
+
+                        <!-- Output Settings Section -->
+                        <GroupBox Header="Output Settings" Margin="0,0,0,10">
+                            <StackPanel Margin="5">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <TextBlock Text="Texture Width:" VerticalAlignment="Center" Width="110"
+                       ToolTip="Specifies the width of the output texture in pixels. Adjust this value to control the resolution of the baked map."/>
+                                    <TextBox Name="txtWidth" Width="50" Text="1024"
+                     ToolTip="Enter the desired width (in pixels) for the baked texture. Higher values yield more detail but may increase processing time."/>
                                 </StackPanel>
-                            </GroupBox>
-
-                            <Button Name="btnLoadAlphaTexture" Content="Load Alpha Texture" Click="btnLoadAlphaTexture_Click" Margin="0,0,0,5" />
-                            <TextBlock Name="txtAlphaPath" Text="No alpha texture loaded" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </GroupBox>
-
-                    <!-- Output Settings Section -->
-                    <GroupBox Header="Output Settings" Margin="0,0,0,10">
-                        <StackPanel Margin="5">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                <TextBlock Text="Texture Width:" VerticalAlignment="Center" Width="110" />
-                                <TextBox Name="txtWidth" Width="50" Text="1024" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Texture Height:" VerticalAlignment="Center" Width="110"
+                       ToolTip="Specifies the height of the output texture in pixels."/>
+                                    <TextBox Name="txtHeight" Width="50" Text="1024"
+                     ToolTip="Enter the desired height (in pixels) for the baked texture. Match this with the width for a square texture or adjust as needed."/>
+                                </StackPanel>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Texture Height:" VerticalAlignment="Center" Width="110" />
-                                <TextBox Name="txtHeight" Width="50" Text="1024" />
-                            </StackPanel>
-                        </StackPanel>
-                    </GroupBox>
+                        </GroupBox>
 
-                    <!-- UV Mapping Options Section -->
-                    <GroupBox Header="UV Mapping Options" Margin="0,0,0,10">
-                        <StackPanel Margin="5">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                <TextBlock Text="Bent Normal/Occlusion Map UV:" VerticalAlignment="Center" Width="180"/>
-                                <ComboBox Name="cmbBentMapUV" Width="100"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Alpha Map UV:" VerticalAlignment="Center" Width="180"/>
-                                <ComboBox Name="cmbAlphaMapUV" Width="100"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </GroupBox>
 
-                    <!-- Map Generation Options Section with Sub-Categories -->
+                        <!-- UV Mapping Options Section -->
+                        <GroupBox Header="UV Mapping Options" Margin="0,0,0,10">
+                            <StackPanel Margin="5">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <TextBlock Text="Bent Normal/Occlusion Map UV:" VerticalAlignment="Center" Width="180"
+                       ToolTip="Select the UV channel to use for the bent normal and occlusion maps. This channel should contain the UV layout appropriate for these maps."/>
+                                    <ComboBox Name="cmbBentMapUV" Width="100"
+                      ToolTip="Choose the UV channel for the bent normal and occlusion maps from the available channels on the model."/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Alpha Map UV:" VerticalAlignment="Center" Width="180"
+                       ToolTip="Select the UV channel to use for sampling the alpha values. This channel should contain the UV layout corresponding to your alpha texture."/>
+                                    <ComboBox Name="cmbAlphaMapUV" Width="100"
+                      ToolTip="Choose the UV channel for the alpha map from the available channels on the model."/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
+
+                        <!-- Map Generation Options Section with Sub-Categories -->
                     <GroupBox Header="Map Generation Options" Margin="0,0,0,10">
                         <StackPanel Margin="5">
                             <!-- Map Types -->
                             <TextBlock Text="Map Types" FontWeight="Bold" Margin="0,0,0,5" />
-                            <StackPanel Orientation="Vertical" Margin="10,0,0,5">
-                                <CheckBox Name="chkGenerateBentNormal" Content="Generate Bent Normal Map" IsChecked="True" Margin="0,0,0,5" />
-                                <CheckBox Name="chkGenerateOcclusion" Content="Generate Occlusion Map" IsChecked="True" Margin="0,0,0,5" />
-                            </StackPanel>
+                                <StackPanel Orientation="Vertical" Margin="10,0,0,5">
+                                    <CheckBox Name="chkGenerateBentNormal" Content="Generate Bent Normal Map" IsChecked="True" Margin="0,0,0,5"
+              ToolTip="When enabled, the baking process will compute a bent normal map that captures the average unoccluded light direction at each surface point."/>
+                                    <CheckBox Name="chkGenerateOcclusion" Content="Generate Occlusion Map" IsChecked="True" Margin="0,0,0,5"
+              ToolTip="When enabled, the baking process will compute an occlusion map to indicate how much ambient light is blocked at each surface point."/>
+                                </StackPanel>
 
-                            <!-- Sampling Options -->
+
+                                <!-- Sampling Options -->
                             <TextBlock Text="Sampling Options" FontWeight="Bold" Margin="0,10,0,5" />
                             <StackPanel Orientation="Vertical" Margin="10,0,0,5">
-                                <CheckBox Name="chkTangentSpace" Content="Use Tangent Space" IsChecked="True" Margin="0,0,0,5" />
-                                <CheckBox Name="chkCosineDistribution" Content="Use Cosine Distribution" IsChecked="True" Margin="0,0,0,5" />
-                                <CheckBox Name="chkEnhancedTangentProcessing" Content="Enhanced Tangent Processing" IsChecked="True" Margin="0,0,0,5" />
-                                <CheckBox Name="chkClampOcclusion" Content="Clamp Occlusion To Threshold" IsChecked="True" Margin="0,0,0,5" />
+                                    <CheckBox Name="chkTangentSpace" Content="Use Tangent Space" IsChecked="True" Margin="0,0,0,5" ToolTip="Transforms the computed bent normals from world space into the surface’s local tangent space. When off, leaves the computed bent normals in world space."/>
+                                    <CheckBox Name="chkCosineDistribution" Content="Use Cosine Distribution" IsChecked="True" Margin="0,0,0,5" ToolTip="Generates sample directions using a cosine-weighted distribution which biases rays toward the surface normal. When off, generates sample directions uniformly over the hemisphere which distributes rays evenly without bias."/>
+                                    <TextBlock Text="Occlusion Map" FontSize="14" FontWeight="DemiBold" Margin="0,10,0,5" />
+                                    <CheckBox Name="chkClampOcclusion" Content="Lerp Occlusion Towards Threshold" IsChecked="True" Margin="0,0,0,5" ToolTip="Values lower than the Occlusion Threshold will be boosted towards the threshold. This has the effect of lightening the darker areas without removing them. When this is off, any occlusion values below the Occlusion Threshold will be brought up to the threshold. To completely disable, leave this off and reduce the threshold to 0."/>
                             </StackPanel>
                         </StackPanel>
                     </GroupBox>
 
                     <!-- Swizzle Options Section -->
-                    <GroupBox Header="Swizzle Options" Margin="0,0,0,10">
-                        <StackPanel Orientation="Horizontal" Margin="5">
-                            <CheckBox Name="chkInvertX" Content="Invert X" IsChecked="False" Margin="0,0,10,0" />
-                            <CheckBox Name="chkInvertY" Content="Invert Y" IsChecked="True" Margin="0,0,10,0" />
-                            <CheckBox Name="chkInvertZ" Content="Invert Z" IsChecked="False" />
-                        </StackPanel>
-                    </GroupBox>
+                        <GroupBox Header="Swizzle Options" Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal" Margin="5">
+                                <CheckBox Name="chkInvertX" Content="Invert X" IsChecked="False" Margin="0,0,10,0"
+                  ToolTip="Invert the X channel (flips the sign of the red component in the normal map)."/>
+                                <CheckBox Name="chkInvertY" Content="Invert Y" IsChecked="True" Margin="0,0,10,0"
+                  ToolTip="Invert the Y channel (flips the sign of the green component in the normal map)."/>
+                                <CheckBox Name="chkInvertZ" Content="Invert Z" IsChecked="False"
+                  ToolTip="Invert the Z channel (flips the sign of the blue component in the normal map)."/>
+                            </StackPanel>
+                        </GroupBox>
 
-                    <!-- Baking Options Section -->
-                    <GroupBox Header="Baking Options" Margin="0,0,0,10">
-                        <StackPanel Margin="5">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                <TextBlock Text="Ray Sample Count:" VerticalAlignment="Center" Width="140" />
-                                <TextBox Name="txtRaySampleCount" Width="50" Text="64" />
+
+                        <!-- Baking Options Section -->
+                        <GroupBox Header="Baking Options" Margin="0,0,0,10">
+                            <StackPanel Margin="5">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <TextBlock Text="Ray Sample Count:" VerticalAlignment="Center" Width="140" 
+                       ToolTip="Specifies the number of rays sampled per pixel. Increasing this value can reduce noise at the cost of performance."/>
+                                    <TextBox Name="txtRaySampleCount" Width="50" Text="64" 
+                     ToolTip="Number of rays used per pixel for baking. Higher values yield smoother results but increase bake time."/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <TextBlock Text="Max Ray Distance:" VerticalAlignment="Center" Width="140" 
+                       ToolTip="Defines the maximum distance a ray can travel. Rays beyond this distance are ignored."/>
+                                    <TextBox Name="txtMaxRayDistance" Width="50" Text="1000" 
+                     ToolTip="Maximum distance for ray intersection tests. Adjust based on the scale of your model."/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <TextBlock Text="Ray Origin Bias:" VerticalAlignment="Center" Width="140" 
+                       ToolTip="A small offset added to the ray origin to avoid self-intersection artifacts."/>
+                                    <TextBox Name="txtRayOriginBias" Width="50" Text="0.01" 
+                     ToolTip="Bias value to offset rays from the surface. Helps prevent rays from intersecting the originating surface."/>
+                                </StackPanel>
+                                <TextBlock Text="Occlusion Map" FontWeight="Bold" Margin="0,10,0,5" 
+                   ToolTip="Settings related to generating the occlusion map."/>
+                                <StackPanel Orientation="Horizontal" Margin="10,0,0,5">
+                                    <TextBlock Text="Occlusion Threshold:" VerticalAlignment="Center" Width="140" 
+                       ToolTip="Threshold for occlusion; pixels with occlusion below this value may be clamped."/>
+                                    <TextBox Name="txtOcclusionThreshold" Width="50" Text="0.726" 
+                     ToolTip="Specifies the occlusion threshold used during baking. Adjust to fine-tune occlusion contrast."/>
+                                </StackPanel>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                <TextBlock Text="Max Ray Distance:" VerticalAlignment="Center" Width="140" />
-                                <TextBox Name="txtMaxRayDistance" Width="50" Text="1000" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                <TextBlock Text="Occlusion Threshold:" VerticalAlignment="Center" Width="140" />
-                                <TextBox Name="txtOcclusionThreshold" Width="50" Text="0.726" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Ray Origin Bias:" VerticalAlignment="Center" Width="140" />
-                                <TextBox Name="txtRayOriginBias" Width="50" Text="0.01" />
-                            </StackPanel>
-                        </StackPanel>
-                    </GroupBox>
-                </StackPanel>
+                        </GroupBox>
+
+                    </StackPanel>
             </ScrollViewer>
 
             <!-- Action Button -->

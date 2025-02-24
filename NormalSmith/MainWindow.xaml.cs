@@ -63,7 +63,7 @@ namespace NormalSmith
         private bool useCosineDistribution = true;
         private bool generateBentNormalMap = true;
         private bool generateOcclusionMap = true;
-        private bool useEnhancedTangentProcessing = true;
+        private bool useEnhancedTangentProcessing = false;
 
         // Swizzle settings for normal map channel adjustment.
         private Vector3 swizzle = new Vector3(1, -1, 1);
@@ -155,8 +155,8 @@ namespace NormalSmith
             chkInvertX.IsChecked = Properties.Settings.Default.SwizzleX < 0;
             chkInvertY.IsChecked = Properties.Settings.Default.SwizzleY < 0;
             chkInvertZ.IsChecked = Properties.Settings.Default.SwizzleZ < 0;
-            chkEnhancedTangentProcessing.IsChecked = Properties.Settings.Default.EnhancedTangentProcessing;
-            chkClampOcclusion.IsChecked = Properties.Settings.Default.ClampOcclusion;
+            //chkEnhancedTangentProcessing.IsChecked = Properties.Settings.Default.EnhancedTangentProcessing;
+            chkClampOcclusion.IsChecked = !Properties.Settings.Default.ClampOcclusion;
 
             // Load fast preview option.
             fastPreviewEnabled = Properties.Settings.Default.FastPreview;
@@ -179,13 +179,14 @@ namespace NormalSmith
             {
                 modelPath = lastModelPath;
                 txtModelPath.Text = modelPath;
+                btnLoadModel.Content = "Clear Model"; // Update button text
                 AssimpContext context = new AssimpContext();
                 loadedScene = context.ImportFile(modelPath,
                     PostProcessSteps.Triangulate |
                     PostProcessSteps.GenerateUVCoords |
                     PostProcessSteps.CalculateTangentSpace);
 
-                // Populate the mesh selection dropdown.
+                // Populate the mesh dropdown.
                 cmbMeshSelection.Items.Clear();
                 for (int i = 0; i < loadedScene.MeshCount; i++)
                 {
@@ -197,6 +198,13 @@ namespace NormalSmith
                 selectedMeshIndex = 0;
                 PopulateUVOptionsForMesh(loadedScene.Meshes[selectedMeshIndex]);
             }
+            else
+            {
+                // No model loaded.
+                modelPath = "";
+                txtModelPath.Text = "No model loaded";
+                btnLoadModel.Content = "Load Model";
+            }
 
             // Load last selected alpha texture using the AlphaTextureHelper.
             string lastAlphaPath = Properties.Settings.Default.LastAlphaPath;
@@ -204,6 +212,12 @@ namespace NormalSmith
             {
                 txtAlphaPath.Text = lastAlphaPath;
                 AlphaTextureHelper.LoadAlphaTexture(lastAlphaPath);
+                btnLoadAlphaTexture.Content = "Clear Alpha Texture"; // Update button text
+            }
+            else
+            {
+                txtAlphaPath.Text = "No alpha texture loaded";
+                btnLoadAlphaTexture.Content = "Load Alpha Texture";
             }
         }
 
@@ -229,8 +243,8 @@ namespace NormalSmith
             Properties.Settings.Default.SwizzleX = (chkInvertX.IsChecked == true) ? -1f : 1f;
             Properties.Settings.Default.SwizzleY = (chkInvertY.IsChecked == true) ? -1f : 1f;
             Properties.Settings.Default.SwizzleZ = (chkInvertZ.IsChecked == true) ? -1f : 1f;
-            Properties.Settings.Default.EnhancedTangentProcessing = (chkEnhancedTangentProcessing.IsChecked == true);
-            Properties.Settings.Default.ClampOcclusion = (chkClampOcclusion.IsChecked == true);
+            //Properties.Settings.Default.EnhancedTangentProcessing = (chkEnhancedTangentProcessing.IsChecked == true);
+            Properties.Settings.Default.ClampOcclusion = (chkClampOcclusion.IsChecked == false);
 
             // Save dark mode state and highlight color.
             Properties.Settings.Default.IsDarkMode = menuDarkModeToggle.IsChecked == true;
@@ -250,8 +264,16 @@ namespace NormalSmith
             Properties.Settings.Default.FastPreview = fastPreviewEnabled;
             Properties.Settings.Default.LastModelFolder = lastModelFolder;
             Properties.Settings.Default.LastAlphaFolder = lastAlphaFolder;
+
+            // Save the loaded model and alpha texture paths based on current state.
+            // If the user cleared the model, then modelPath is empty.
+            Properties.Settings.Default.LastModelPath = modelPath;
+            // Similarly, if the alpha texture is cleared, txtAlphaPath.Text should say "No alpha texture loaded".
+            Properties.Settings.Default.LastAlphaPath = txtAlphaPath.Text == "No alpha texture loaded" ? "" : txtAlphaPath.Text;
+
             Properties.Settings.Default.Save();
         }
+
         #endregion
 
         #region Assimp Node Transform Helpers
@@ -352,6 +374,18 @@ namespace NormalSmith
         /// </summary>
         private void btnLoadModel_Click(object sender, RoutedEventArgs e)
         {
+            // If a model is already loaded, clear it.
+            if (!string.IsNullOrEmpty(modelPath))
+            {
+                modelPath = "";
+                loadedScene = null;
+                txtModelPath.Text = "No model loaded";
+                cmbMeshSelection.Items.Clear();
+                btnLoadModel.Content = "Load Model";
+                return;
+            }
+
+            // No model loaded: open file dialog to load one.
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "3D Models|*.fbx;*.obj;*.dae;*.3ds|All Files|*.*",
@@ -363,10 +397,11 @@ namespace NormalSmith
             {
                 modelPath = dlg.FileName;
                 txtModelPath.Text = modelPath;
+                btnLoadModel.Content = "Clear Model";
                 lastModelFolder = System.IO.Path.GetDirectoryName(modelPath);
                 Properties.Settings.Default.LastModelPath = modelPath;
 
-                // Import the model scene.
+                // Import the model.
                 AssimpContext context = new AssimpContext();
                 loadedScene = context.ImportFile(modelPath,
                     PostProcessSteps.Triangulate |
@@ -383,11 +418,10 @@ namespace NormalSmith
                 }
                 cmbMeshSelection.SelectedIndex = 0;
                 selectedMeshIndex = 0;
-
-                // Update UV options based on the selected mesh.
                 PopulateUVOptionsForMesh(loadedScene.Meshes[selectedMeshIndex]);
             }
         }
+
 
         /// <summary>
         /// Updates the UV selection dropdowns when a new mesh is selected.
@@ -407,6 +441,16 @@ namespace NormalSmith
         /// </summary>
         private void btnLoadAlphaTexture_Click(object sender, RoutedEventArgs e)
         {
+            // If an alpha texture is already loaded, clear it.
+            if (!string.IsNullOrEmpty(txtAlphaPath.Text) && txtAlphaPath.Text != "No alpha texture loaded")
+            {
+                txtAlphaPath.Text = "No alpha texture loaded";
+                AlphaTextureHelper.ClearAlphaTexture();
+                btnLoadAlphaTexture.Content = "Load Alpha Texture";
+                return;
+            }
+
+            // No alpha texture loaded: open file dialog to load one.
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "Image Files|*.png;*.jpg;*.bmp",
@@ -418,10 +462,12 @@ namespace NormalSmith
             {
                 AlphaTextureHelper.LoadAlphaTexture(dlg.FileName);
                 txtAlphaPath.Text = dlg.FileName;
+                btnLoadAlphaTexture.Content = "Clear Alpha Texture";
                 lastAlphaFolder = System.IO.Path.GetDirectoryName(dlg.FileName);
                 Properties.Settings.Default.LastAlphaPath = dlg.FileName;
             }
         }
+
 
         /// <summary>
         /// Initiates the baking process, updating the UI during processing and saving the resulting maps.
@@ -459,7 +505,7 @@ namespace NormalSmith
             useCosineDistribution = (chkCosineDistribution.IsChecked == true);
             generateBentNormalMap = (chkGenerateBentNormal.IsChecked == true);
             generateOcclusionMap = (chkGenerateOcclusion.IsChecked == true);
-            useEnhancedTangentProcessing = (chkEnhancedTangentProcessing.IsChecked == true);
+            //useEnhancedTangentProcessing = (chkEnhancedTangentProcessing.IsChecked == true);
 
             float swizX = (chkInvertX.IsChecked == true) ? -1f : 1f;
             float swizY = (chkInvertY.IsChecked == true) ? -1f : 1f;
@@ -476,10 +522,10 @@ namespace NormalSmith
                 });
                 int bentUVIndex = cmbBentMapUV.SelectedIndex;
                 int alphaUVIndex = cmbAlphaMapUV.SelectedIndex;
-                bool clampOcclusion = chkClampOcclusion.IsChecked == true;
+                bool clampOcclusion = chkClampOcclusion.IsChecked == false;
 
                 // Start the baking process using the BakingEngine.
-                Bitmap previewBmp = await BakingEngine.BakeBentNormalMapAsync(
+                BakeResult bakeResult = await BakingEngine.BakeBentNormalMapAsync(
                     modelPath, textureWidth, textureHeight,
                     useTangentSpace, useCosineDistribution,
                     generateBentNormalMap, generateOcclusionMap,
@@ -502,8 +548,6 @@ namespace NormalSmith
                 taskbarInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.None;
                 this.Title = "Bake Complete!";
 
-                imgPreview.Source = BitmapToImageSource(previewBmp);
-
                 // Save the generated maps.
                 if (generateBentNormalMap && generateOcclusionMap)
                 {
@@ -520,7 +564,7 @@ namespace NormalSmith
                             format = System.Drawing.Imaging.ImageFormat.Jpeg;
                         else if (ext == ".bmp")
                             format = System.Drawing.Imaging.ImageFormat.Bmp;
-                        finalBentMap.Save(dlgBent.FileName, format);
+                        bakeResult.BentMap.Save(dlgBent.FileName, format);
                         System.Windows.MessageBox.Show("Bent Normal Map saved to: " + dlgBent.FileName);
                     }
 
@@ -537,7 +581,7 @@ namespace NormalSmith
                             format = System.Drawing.Imaging.ImageFormat.Jpeg;
                         else if (ext == ".bmp")
                             format = System.Drawing.Imaging.ImageFormat.Bmp;
-                        finalOccMap.Save(dlgOcc.FileName, format);
+                        bakeResult.OccMap.Save(dlgOcc.FileName, format);
                         System.Windows.MessageBox.Show("Occlusion Map saved to: " + dlgOcc.FileName);
                     }
                 }
@@ -556,7 +600,7 @@ namespace NormalSmith
                             format = System.Drawing.Imaging.ImageFormat.Jpeg;
                         else if (ext == ".bmp")
                             format = System.Drawing.Imaging.ImageFormat.Bmp;
-                        previewBmp.Save(dlg.FileName, format);
+                        bakeResult.PreviewBmp.Save(dlg.FileName, format);
                         System.Windows.MessageBox.Show("Image saved to: " + dlg.FileName);
                     }
                 }
@@ -566,7 +610,7 @@ namespace NormalSmith
                 btnBake.Content = "Bake Maps";
                 bakeCancellationTokenSource = null;
                 taskbarInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.None;
-                this.Title = "NormalSmith - Map Baker";
+                this.Title = "Normal Smith";
             }
             catch (Exception ex)
             {

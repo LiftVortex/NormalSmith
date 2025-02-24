@@ -15,9 +15,18 @@ using System.Drawing; // For PointF, Bitmap, Rectangle
 // Alias to resolve ambiguity between Assimp and System.Numerics:
 using NumericsMatrix = System.Numerics.Matrix4x4;
 using NormalSmith.DataStructure;
+using NormalSmith.HelperFunctions;
 
 namespace NormalSmith.Engine
 {
+    public class BakeResult
+    {
+        public Bitmap PreviewBmp { get; set; }
+        public Bitmap BentMap { get; set; }
+        public Bitmap OccMap { get; set; }
+    }
+
+
     /// <summary>
     /// Provides functionality for baking bent normal maps and occlusion maps from a 3D model.
     /// </summary>
@@ -79,7 +88,7 @@ namespace NormalSmith.Engine
         /// <param name="updateTitle">A delegate function to update the UI window title.</param>
         /// <param name="invokeOnDispatcher">A delegate to marshal actions onto the UI thread.</param>
         /// <returns>A task that completes with the final preview bitmap.</returns>
-        public static async Task<Bitmap> BakeBentNormalMapAsync(
+        public static async Task<BakeResult> BakeBentNormalMapAsync(
             string modelPath, int width, int height,
             bool useTangentSpace, bool useCosineDistribution,
             bool generateBentNormalMap, bool generateOcclusionMap,
@@ -94,6 +103,9 @@ namespace NormalSmith.Engine
         {
             return await Task.Run(() =>
             {
+                // Lower the baking thread's priority
+                Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
+
                 // Record the start time for progress calculations and throw if canceled.
                 DateTime startTime = DateTime.UtcNow;
                 token.ThrowIfCancellationRequested();
@@ -123,8 +135,15 @@ namespace NormalSmith.Engine
                 }
 
                 // Ensure there is at least one mesh in the scene.
-                if (scene.MeshCount == 0)
-                    throw new Exception("No mesh found in file.");
+                if(scene != null)
+                {
+                    if (scene.MeshCount == 0 || scene == null)
+                        throw new Exception("No mesh found in file.");
+                }
+                else
+                {
+                    throw new Exception("No mesh file loaded.");
+                }
 
                 // Retrieve the chosen mesh.
                 var baseMesh = scene.Meshes[selectedMeshIndex];
@@ -190,6 +209,17 @@ namespace NormalSmith.Engine
 
                 // Build the BVH for occlusion testing.
                 BVHNode bvhRoot = new BVHNode(occluderTriangles, 0);
+                // If rayOriginBias is not provided (<= 0), compute a recommended value.
+                // This computes the diagonal of the BVH's bounding box and sets the bias to 0.1% of that diagonal.
+                if (rayOriginBias <= 0)
+                {
+                    Vector3 diag = bvhRoot.Box.Max - bvhRoot.Box.Min;
+                    // For a normalized model, diag.Length() is about 1.73, so 0.00173 is a good start.
+                    // You can also choose a fixed value like 0.002f if your models are normalized.
+                    rayOriginBias = diag.Length() * 0.001f;
+                    // Alternatively, you could use:
+                    // rayOriginBias = 0.002f;
+                }
 
                 // Check if the selected bent UV channel is valid.
                 if (!baseMesh.HasTextureCoords(bentUVIndex))
@@ -233,25 +263,86 @@ namespace NormalSmith.Engine
                 // Set up progress tracking and preview updates.
                 int processedTriangles = 0;
                 int totalTriangles = baseMesh.FaceCount;
+                double smoothingFactor = 0.8; // Adjust between 0 and 1; lower values smooth more.
+                double lastProgress = 0.0;
+                DateTime lastUpdateTime = startTime;
+                TimeSpan smoothedETA = TimeSpan.Zero;
+                // Tracks a smoothed “items per second” throughput.
+                double smoothedThroughput = 0.0;
+                // The last time we did a throughput check.
+                DateTime lastCheckTime = startTime;
+                // How many triangles we had processed at the last check.
+                int lastProcessedTriangles = 0;
+                // Start a timer to periodically update the UI and compute ETA.
                 var previewTimer = new System.Threading.Timer(_ =>
                 {
-                    double progressValue = (double)Interlocked.CompareExchange(ref processedTriangles, 0, 0) / totalTriangles;
-                    progress.Report(progressValue);
+                    // 1) Measure how many triangles were processed since last time
+                    DateTime now = DateTime.UtcNow;
+                    TimeSpan interval = now - lastCheckTime;
 
-                    TimeSpan elapsed = DateTime.UtcNow - startTime;
-                    string remainingTimeText = "Calculating...";
-                    if (progressValue > 0)
+                    // The total number of triangles processed so far:
+                    int currentProcessed = Interlocked.CompareExchange(ref processedTriangles, 0, 0);
+
+                    // Triangles processed *this* interval
+                    int processedThisInterval = currentProcessed - lastProcessedTriangles;
+
+                    // Update smoothed throughput (items/sec)
+                    if (processedThisInterval > 0 && interval.TotalSeconds > 0)
                     {
-                        TimeSpan estimatedTotal = TimeSpan.FromTicks((long)(elapsed.Ticks / progressValue));
-                        TimeSpan remaining = estimatedTotal - elapsed;
-                        remainingTimeText = remaining.ToString(@"hh\:mm\:ss");
+                        double rawThroughput = processedThisInterval / interval.TotalSeconds;
+
+                        if (smoothedThroughput < 1e-6)
+                        {
+                            // First measurement
+                            smoothedThroughput = rawThroughput;
+                        }
+                        else
+                        {
+                            // Exponential smoothing
+                            smoothedThroughput = smoothingFactor * smoothedThroughput
+                                                 + (1.0 - smoothingFactor) * rawThroughput;
+                        }
                     }
 
-                    invokeOnDispatcher(() => updateTitle($"Baking... {progressValue:P0} - ETA: {remainingTimeText}"));
+                    // Update "last check" for the next callback
+                    lastProcessedTriangles = currentProcessed;
+                    lastCheckTime = now;
 
-                    // Provide a preview image to the UI.
+                    // 2) Compute fraction of work done (0 to 1)
+                    double fractionComplete = (double)currentProcessed / totalTriangles;
+                    progress.Report(fractionComplete);
+
+                    // 3) Compute an ETA string
+                    string remainingTimeText = "";
+
+                    // Only show an ETA if:
+                    //    - we've made at least 10% progress,
+                    //    - we haven't finished yet, and
+                    //    - we have a non-trivial throughput measurement
+                    if (fractionComplete >= 0.1 && fractionComplete < 1.0 && smoothedThroughput > 0.01)
+                    {
+                        int itemsLeft = totalTriangles - currentProcessed;
+                        double secondsLeft = itemsLeft / smoothedThroughput;
+                        TimeSpan newEta = TimeSpan.FromSeconds(secondsLeft);
+                        //remainingTimeText = newEta.ToString(@"hh\:mm\:s");
+                    }
+                    else if (fractionComplete >= 1.0)
+                    {
+                        // If we are effectively done
+                        //remainingTimeText = "00:00:00";
+                    }
+
+                    // 4) Update title with progress and ETA
+                    invokeOnDispatcher(() => updateTitle(
+                        $"Baking... {fractionComplete:P0} {remainingTimeText}"
+                    ));
+
+                    // 5) Provide a preview image to the UI 
+                    //    (Same logic you had before; simplified to show the gist.)
+
                     if (!dualMode)
                     {
+                        // Single-buffer preview
                         using (var previewBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb))
                         {
                             var bmpData = previewBmp.LockBits(
@@ -260,11 +351,14 @@ namespace NormalSmith.Engine
                                 previewBmp.PixelFormat);
                             Marshal.Copy(singleBuffer, 0, bmpData.Scan0, singleBuffer.Length);
                             previewBmp.UnlockBits(bmpData);
+
+                            // Marshal back to UI thread to show the image
                             invokeOnDispatcher(() => updatePreview(previewBmp));
                         }
                     }
                     else
                     {
+                        // Dual-mode: show bent buffer as preview
                         using (var bentPreview = new Bitmap(width, height, PixelFormat.Format32bppArgb))
                         {
                             var bentData = bentPreview.LockBits(
@@ -273,10 +367,15 @@ namespace NormalSmith.Engine
                                 bentPreview.PixelFormat);
                             Marshal.Copy(bentBuffer, 0, bentData.Scan0, bentBuffer.Length);
                             bentPreview.UnlockBits(bentData);
+
                             invokeOnDispatcher(() => updatePreview(bentPreview));
                         }
                     }
-                }, null, previewInterval, previewInterval);
+                },
+                null,
+                previewInterval,  // e.g., 500 ms or 1000 ms
+                previewInterval);
+
 
                 try
                 {
@@ -284,9 +383,9 @@ namespace NormalSmith.Engine
                     Parallel.For(0, totalTriangles, new ParallelOptions
                     {
                         CancellationToken = token,
-                        MaxDegreeOfParallelism = Environment.ProcessorCount
+                        MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 2)
                     },
-                    triIndex =>
+                                        triIndex =>
                     {
                         token.ThrowIfCancellationRequested();
                         Face face = baseMesh.Faces[triIndex];
@@ -322,7 +421,7 @@ namespace NormalSmith.Engine
                         // Depending on dual-mode, we rasterize and compute differently.
                         if (dualMode)
                         {
-                            RasterizeTriangleToDualBuffer(
+                            AARasterizer.RasterizeTriangleToDualBufferAA(
                                 bentBuffer,
                                 occBuffer,
                                 width,
@@ -330,7 +429,7 @@ namespace NormalSmith.Engine
                                 p0,
                                 p1,
                                 p2,
-                                (x, y, bary, uvInterp) =>
+                                (int x, int y, Vector3 bary, PointF uvInterp, out int bentColor, out int occColor) =>
                                 {
                                     Vector3 interpNormal = Vector3.Normalize(
                                         bary.X * nor0 + bary.Y * nor1 + bary.Z * nor2);
@@ -350,7 +449,9 @@ namespace NormalSmith.Engine
                                         Vector3 sampleDir = GenerateSampleDirection(
                                             rand, interpNormal, interpTangent,
                                             useCosineDistribution, useEnhancedTangentProcessing);
-                                        if (!bvhRoot.IntersectRayWithAlpha(origin, sampleDir, maxDistanceLocal, sampleAlpha))
+                                        float? tHit = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir, maxDistanceLocal, sampleAlpha);
+                                        bool blocked = tHit.HasValue && tHit.Value < maxDistanceLocal;
+                                        if (!blocked)
                                         {
                                             unoccluded++;
                                             sumDir += sampleDir;
@@ -364,9 +465,8 @@ namespace NormalSmith.Engine
                                             ? Lerp(occ, occlusionThreshold,
                                                 (1 - occ / occlusionThreshold) * (1 - occ / occlusionThreshold))
                                             : occ;
-
                                     int gray = (int)Math.Clamp(finalOcc * 255, 0, 255);
-                                    int occColor = 255 << 24 | gray << 16 | gray << 8 | gray;
+                                    occColor = (255 << 24) | (gray << 16) | (gray << 8) | gray;
 
                                     float blendT = unoccluded / (float)sampleCountLocal;
                                     Vector3 rawBent = unoccluded > 0
@@ -376,7 +476,6 @@ namespace NormalSmith.Engine
                                     {
                                         rawBent = Vector3.Normalize(Vector3.Lerp(interpNormal, rawBent, blendT));
                                     }
-
                                     if (useTangentSpace)
                                     {
                                         Vector3 T = Vector3.Normalize(interpTangent);
@@ -387,15 +486,13 @@ namespace NormalSmith.Engine
                                             Vector3.Dot(rawBent, B),
                                             Vector3.Dot(rawBent, N));
                                     }
-                                    int bentColor = ColorToInt(rawBent, swizzle);
-
-                                    occBuffer[y * width + x] = occColor;
-                                    bentBuffer[y * width + x] = bentColor;
+                                    bentColor = ColorToInt(rawBent, swizzle);
+                                    // Do not write directly to bentBuffer/occBuffer here.
                                 });
                         }
                         else
                         {
-                            RasterizeTriangleToBuffer(
+                            AARasterizer.RasterizeTriangleToBufferAA(
                                 singleBuffer,
                                 width,
                                 height,
@@ -426,7 +523,9 @@ namespace NormalSmith.Engine
                                         Vector3 sampleDir = GenerateSampleDirection(
                                             rand, interpNormal, interpTangent,
                                             useCosineDistribution, useEnhancedTangentProcessing);
-                                        if (!bvhRoot.IntersectRayWithAlpha(origin, sampleDir, maxDistanceLocal, sampleAlpha))
+                                        float? tHit = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir, maxDistanceLocal, sampleAlpha);
+                                        bool blocked = tHit.HasValue && tHit.Value < maxDistanceLocal;
+                                        if (!blocked)
                                         {
                                             unoccluded++;
                                             sumDir += sampleDir;
@@ -440,9 +539,8 @@ namespace NormalSmith.Engine
                                             ? Lerp(occ, occlusionThreshold,
                                                 (1 - occ / occlusionThreshold) * (1 - occ / occlusionThreshold))
                                             : occ;
-
                                     int gray = (int)Math.Clamp(finalOcc * 255, 0, 255);
-                                    int occColor = 255 << 24 | gray << 16 | gray << 8 | gray;
+                                    int occColor = (255 << 24) | (gray << 16) | (gray << 8) | gray;
 
                                     float blendT = unoccluded / (float)sampleCountLocal;
                                     Vector3 rawBent = unoccluded > 0
@@ -452,7 +550,6 @@ namespace NormalSmith.Engine
                                     {
                                         rawBent = Vector3.Normalize(Vector3.Lerp(interpNormal, rawBent, blendT));
                                     }
-
                                     if (useTangentSpace)
                                     {
                                         Vector3 T = Vector3.Normalize(interpTangent);
@@ -463,17 +560,15 @@ namespace NormalSmith.Engine
                                             Vector3.Dot(rawBent, B),
                                             Vector3.Dot(rawBent, N));
                                     }
-
-                                    // If only occlusion is generated, return occColor; otherwise bent normal.
                                     int colorInt = generateOcclusionMap && !generateBentNormalMap
                                         ? occColor
                                         : ColorToInt(rawBent, swizzle);
-
                                     return colorInt;
                                 });
                         }
 
                         Interlocked.Increment(ref processedTriangles);
+
                     });
                 }
                 finally
@@ -484,7 +579,7 @@ namespace NormalSmith.Engine
                     {
                         if (token.IsCancellationRequested)
                         {
-                            updateTitle("NormalSmith - Map Baker");
+                            updateTitle("Normal Smith");
                         }
                     });
                 }
@@ -495,6 +590,7 @@ namespace NormalSmith.Engine
 
                 // Gather final results into bitmaps.
                 Bitmap finalBmp;
+                BakeResult bakeResult = new BakeResult();
                 if (dualMode)
                 {
                     var bentBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
@@ -516,6 +612,9 @@ namespace NormalSmith.Engine
                     FinalBentMap = bentBmp;
                     FinalOccMap = occBmp;
                     finalBmp = bentBmp; // Provide the bent map as a preview in dual mode.
+                    bakeResult.BentMap = bentBmp;
+                    bakeResult.OccMap = occBmp;
+                    bakeResult.PreviewBmp = bentBmp;
                 }
                 else
                 {
@@ -526,9 +625,10 @@ namespace NormalSmith.Engine
                         finalBmp.PixelFormat);
                     Marshal.Copy(singleBuffer, 0, finalData.Scan0, singleBuffer.Length);
                     finalBmp.UnlockBits(finalData);
+                    bakeResult.PreviewBmp = finalBmp;
                 }
 
-                return finalBmp;
+                return bakeResult;
             }, token);
         }
 
@@ -566,105 +666,6 @@ namespace NormalSmith.Engine
                 current = current.Parent;
             }
             return transform;
-        }
-
-        /// <summary>
-        /// Rasterizes a single triangle into the given pixel buffer, calling sampleFunc to compute each pixel's color.
-        /// </summary>
-        private static void RasterizeTriangleToBuffer(
-            int[] pixelBuffer,
-            int width,
-            int height,
-            PointF p0,
-            PointF p1,
-            PointF p2,
-            Func<int, int, Vector3, PointF, int> sampleFunc)
-        {
-            float minX = MathF.Min(p0.X, MathF.Min(p1.X, p2.X));
-            float minY = MathF.Min(p0.Y, MathF.Min(p1.Y, p2.Y));
-            float maxX = MathF.Max(p0.X, MathF.Max(p1.X, p2.X));
-            float maxY = MathF.Max(p0.Y, MathF.Max(p1.Y, p2.Y));
-            int x0 = Math.Max((int)MathF.Floor(minX), 0);
-            int y0 = Math.Max((int)MathF.Floor(minY), 0);
-            int x1 = Math.Min((int)MathF.Ceiling(maxX), width);
-            int y1 = Math.Min((int)MathF.Ceiling(maxY), height);
-            float area = EdgeFunction(p0, p1, p2);
-            if (area == 0)
-                return;
-
-            Parallel.For(y0, y1, y =>
-            {
-                for (int x = x0; x < x1; x++)
-                {
-                    PointF p = new PointF(x + 0.5f, y + 0.5f);
-                    float w0 = EdgeFunction(p1, p2, p);
-                    float w1 = EdgeFunction(p2, p0, p);
-                    float w2 = EdgeFunction(p0, p1, p);
-                    if (w0 >= 0 && w1 >= 0 && w2 >= 0)
-                    {
-                        Vector3 bary = new Vector3(w0 / area, w1 / area, w2 / area);
-                        float u = bary.X * p0.X + bary.Y * p1.X + bary.Z * p2.X;
-                        float v = bary.X * p0.Y + bary.Y * p1.Y + bary.Z * p2.Y;
-                        PointF uvInterp = new PointF(u / width, 1 - v / height);
-                        int colorInt = sampleFunc(x, y, bary, uvInterp);
-                        pixelBuffer[y * width + x] = colorInt;
-                    }
-                }
-            });
-        }
-
-        /// <summary>
-        /// Rasterizes a single triangle into two separate pixel buffers (bentBuffer and occBuffer),
-        /// calling sampleAction to write both bent normal and occlusion data.
-        /// </summary>
-        private static void RasterizeTriangleToDualBuffer(
-            int[] bentBuffer,
-            int[] occBuffer,
-            int width,
-            int height,
-            PointF p0,
-            PointF p1,
-            PointF p2,
-            Action<int, int, Vector3, PointF> sampleAction)
-        {
-            float minX = MathF.Min(p0.X, MathF.Min(p1.X, p2.X));
-            float minY = MathF.Min(p0.Y, MathF.Min(p1.Y, p2.Y));
-            float maxX = MathF.Max(p0.X, MathF.Max(p1.X, p2.X));
-            float maxY = MathF.Max(p0.Y, MathF.Max(p1.Y, p2.Y));
-            int x0 = Math.Max((int)MathF.Floor(minX), 0);
-            int y0 = Math.Max((int)MathF.Floor(minY), 0);
-            int x1 = Math.Min((int)MathF.Ceiling(maxX), width);
-            int y1 = Math.Min((int)MathF.Ceiling(maxY), height);
-            float area = EdgeFunction(p0, p1, p2);
-            if (area == 0)
-                return;
-
-            Parallel.For(y0, y1, y =>
-            {
-                for (int x = x0; x < x1; x++)
-                {
-                    PointF p = new PointF(x + 0.5f, y + 0.5f);
-                    float w0 = EdgeFunction(p1, p2, p);
-                    float w1 = EdgeFunction(p2, p0, p);
-                    float w2 = EdgeFunction(p0, p1, p);
-                    if (w0 >= 0 && w1 >= 0 && w2 >= 0)
-                    {
-                        Vector3 bary = new Vector3(w0 / area, w1 / area, w2 / area);
-                        float u = bary.X * p0.X + bary.Y * p1.X + bary.Z * p2.X;
-                        float v = bary.X * p0.Y + bary.Y * p1.Y + bary.Z * p2.Y;
-                        PointF uvInterp = new PointF(u / width, 1 - v / height);
-                        sampleAction(x, y, bary, uvInterp);
-                    }
-                }
-            });
-        }
-
-        /// <summary>
-        /// Computes the signed area of a triangle in 2D space for rasterization.
-        /// </summary>
-        private static float EdgeFunction(PointF a, PointF b, PointF c)
-        {
-            return (c.X - a.X) * (b.Y - a.Y) - (c.Y - a.Y) * (b.X - a.X);
         }
 
         /// <summary>
