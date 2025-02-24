@@ -388,7 +388,7 @@ namespace NormalSmith
             // No model loaded: open file dialog to load one.
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
-                Filter = "3D Models|*.fbx;*.obj;*.dae;*.3ds|All Files|*.*",
+                Filter = "3D Models|*.fbx|All Files|*.*",
                 InitialDirectory = string.IsNullOrEmpty(lastModelFolder)
                     ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
                     : lastModelFolder
