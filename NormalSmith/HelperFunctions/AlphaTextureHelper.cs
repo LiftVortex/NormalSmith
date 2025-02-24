@@ -15,6 +15,18 @@ namespace NormalSmith.HelperFunctions
         // Cached pixel data.
         private static byte[] cachedAlphaData;
         private static int cachedAlphaWidth, cachedAlphaHeight;
+        public static void ClearAlphaTexture()
+        {
+            lock (alphaLock)
+            {
+                alphaBitmap?.Dispose();
+                alphaBitmap = null;
+                cachedAlphaData = null;
+                cachedAlphaWidth = 0;
+                cachedAlphaHeight = 0;
+            }
+        }
+
 
         /// <summary>
         /// Loads an alpha texture from the given file path and caches its pixel data.

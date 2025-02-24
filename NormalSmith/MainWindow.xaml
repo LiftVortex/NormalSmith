@@ -231,10 +231,10 @@
                             <!-- Sampling Options -->
                             <TextBlock Text="Sampling Options" FontWeight="Bold" Margin="0,10,0,5" />
                             <StackPanel Orientation="Vertical" Margin="10,0,0,5">
-                                <CheckBox Name="chkTangentSpace" Content="Use Tangent Space" IsChecked="True" Margin="0,0,0,5" />
-                                <CheckBox Name="chkCosineDistribution" Content="Use Cosine Distribution" IsChecked="True" Margin="0,0,0,5" />
-                                <CheckBox Name="chkEnhancedTangentProcessing" Content="Enhanced Tangent Processing" IsChecked="True" Margin="0,0,0,5" />
-                                <CheckBox Name="chkClampOcclusion" Content="Clamp Occlusion To Threshold" IsChecked="True" Margin="0,0,0,5" />
+                                    <CheckBox Name="chkTangentSpace" Content="Use Tangent Space" IsChecked="True" Margin="0,0,0,5" ToolTip="Transforms the computed bent normals from world space into the surface’s local tangent space. When off, leaves the computed bent normals in world space."/>
+                                    <CheckBox Name="chkCosineDistribution" Content="Use Cosine Distribution" IsChecked="True" Margin="0,0,0,5" ToolTip="Generates sample directions using a cosine-weighted distribution which biases rays toward the surface normal. When off, generates sample directions uniformly over the hemisphere which distributes rays evenly without bias."/>
+                                <CheckBox Name="chkEnhancedTangentProcessing" Content="Enhanced Tangent Processing" IsChecked="True" Margin="0,0,0,5" ToolTip="Blends the computed bent normal with the original surface normal using the mesh’s tangent basis. This produces smoother, more accurate shading by easing transitions based on the proportion of unoccluded samples. When off, uses a basic fallback method for sample direction generation—without blending—resulting in a more direct (and potentially harsher) bent normal output."/>
+                                <CheckBox Name="chkClampOcclusion" Content="Lerp Occlusion Towards Threshold" IsChecked="True" Margin="0,0,0,5" ToolTip="Values lower than the Occlusion Threshold will be boosted towards the threshold. This has the effect of lightening the darker areas without removing them. When this is off, any occlusion values below the Occlusion Threshold will be brought up to the threshold. To completely disable, leave this off and reduce the threshold to 0."/>
                             </StackPanel>
                         </StackPanel>
                     </GroupBox>

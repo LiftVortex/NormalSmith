@@ -18,6 +18,14 @@ using NormalSmith.DataStructure;
 
 namespace NormalSmith.Engine
 {
+    public class BakeResult
+    {
+        public Bitmap PreviewBmp { get; set; }
+        public Bitmap BentMap { get; set; }
+        public Bitmap OccMap { get; set; }
+    }
+
+
     /// <summary>
     /// Provides functionality for baking bent normal maps and occlusion maps from a 3D model.
     /// </summary>
@@ -79,7 +87,7 @@ namespace NormalSmith.Engine
         /// <param name="updateTitle">A delegate function to update the UI window title.</param>
         /// <param name="invokeOnDispatcher">A delegate to marshal actions onto the UI thread.</param>
         /// <returns>A task that completes with the final preview bitmap.</returns>
-        public static async Task<Bitmap> BakeBentNormalMapAsync(
+        public static async Task<BakeResult> BakeBentNormalMapAsync(
             string modelPath, int width, int height,
             bool useTangentSpace, bool useCosineDistribution,
             bool generateBentNormalMap, bool generateOcclusionMap,
@@ -123,8 +131,15 @@ namespace NormalSmith.Engine
                 }
 
                 // Ensure there is at least one mesh in the scene.
-                if (scene.MeshCount == 0)
-                    throw new Exception("No mesh found in file.");
+                if(scene != null)
+                {
+                    if (scene.MeshCount == 0 || scene == null)
+                        throw new Exception("No mesh found in file.");
+                }
+                else
+                {
+                    throw new Exception("No mesh file loaded.");
+                }
 
                 // Retrieve the chosen mesh.
                 var baseMesh = scene.Meshes[selectedMeshIndex];
@@ -495,6 +510,7 @@ namespace NormalSmith.Engine
 
                 // Gather final results into bitmaps.
                 Bitmap finalBmp;
+                BakeResult bakeResult = new BakeResult();
                 if (dualMode)
                 {
                     var bentBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
@@ -516,6 +532,9 @@ namespace NormalSmith.Engine
                     FinalBentMap = bentBmp;
                     FinalOccMap = occBmp;
                     finalBmp = bentBmp; // Provide the bent map as a preview in dual mode.
+                    bakeResult.BentMap = bentBmp;
+                    bakeResult.OccMap = occBmp;
+                    bakeResult.PreviewBmp = bentBmp;
                 }
                 else
                 {
@@ -526,9 +545,10 @@ namespace NormalSmith.Engine
                         finalBmp.PixelFormat);
                     Marshal.Copy(singleBuffer, 0, finalData.Scan0, singleBuffer.Length);
                     finalBmp.UnlockBits(finalData);
+                    bakeResult.PreviewBmp = finalBmp;
                 }
 
-                return finalBmp;
+                return bakeResult;
             }, token);
         }
 
