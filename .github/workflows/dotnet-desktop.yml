@@ -33,8 +33,20 @@ jobs:
         run: msbuild $env:Solution_Name /t:Restore /p:Configuration=${{ matrix.configuration }} /p:UseSharedCompilation=false /p:OutDir="$env:GITHUB_WORKSPACE\build\"
         shell: pwsh
 
+      - name: Sanitize release tag
+        id: sanitize_tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          echo "Original tag: $TAG"
+          if [[ "$TAG" == v* ]]; then
+            TAG="${TAG:1}"
+          fi
+          echo "Sanitized tag: $TAG"
+          echo "sanitized_tag=$TAG" >> $GITHUB_OUTPUT
+
       - name: Build the solution using MSBuild
-        run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }} /p:UseSharedCompilation=false /p:OutDir="$env:GITHUB_WORKSPACE\build\"
+        run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }} /p:UseSharedCompilation=false /p:Version=${{ steps.sanitize_tag.outputs.sanitized_tag }} /p:AssemblyInformationalVersion=${{ steps.sanitize_tag.outputs.sanitized_tag }} /p:OutDir="$env:GITHUB_WORKSPACE\build\"
         shell: pwsh
 
       - name: Sign the Executable (Release only)
@@ -89,6 +101,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Get commit message
+        id: commit
+        run: |
+          # Retrieve the commit message for the commit associated with the tag
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          echo "commit_message=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
+
+      - name: List commit titles since last release
+        id: commit_titles
+        shell: bash
+        run: |
+          # Ensure all tags are fetched
+          git fetch --tags
+          # Try to find the previous tag (skip the current one)
+          PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+          echo "Previous tag: $PREV_TAG"
+          if [ -z "$PREV_TAG" ]; then
+            # No previous tag found, list all commits
+            COMMITS=$(git log --pretty=format:"* %s")
+          else
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"* %s")
+          fi
+          echo "Commit titles:"
+          echo "$COMMITS"
+          echo "commit_titles<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Download build artifact
         uses: actions/download-artifact@v4
         with:
@@ -103,16 +143,17 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
-          # If the tag ends with "p", prerelease will be true; otherwise false.
           prerelease: ${{ endsWith(github.ref, 'p') }}
-          body: "Automatically generated release for version ${{ github.ref }}"
+          body: |
+            ### Overview
+            ${{ steps.commit.outputs.commit_message }}
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ github.workspace }}/build.zip
-          asset_name: NormalSmith-Build.zip
-          asset_content_type: application/zip
+            ### Changes
+            ${{ steps.commit_titles.outputs.commit_titles }}
+
+            ### Instructions
+            - Download NormalSmith-Build.zip
+            - Open NormalSmith.exe
+
+            ### Requirements
+            - [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/thank-you/runtime-desktop-8.0.13-windows-x64-installer)
