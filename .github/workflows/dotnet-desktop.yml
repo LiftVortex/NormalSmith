@@ -119,17 +119,17 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
           echo "Previous tag: $PREV_TAG"
           if [ -z "$PREV_TAG" ]; then
-            # No previous tag found, list all commits as markdown links.
-            COMMITS=$(git log --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v "Update dotnet-desktop.yml")
+            # No previous tag found, list all commits as markdown links and filter out unwanted titles.
+            COMMITS=$(git log --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md")
           else
-            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v "Update dotnet-desktop.yml")
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md")
           fi
           echo "Commit titles with links:"
           echo "$COMMITS"
           echo "commit_titles<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
+          
       - name: Download build artifact
         uses: actions/download-artifact@v4
         with:
