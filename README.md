@@ -20,8 +20,14 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 - **Bent Normal Map & Ambient Occlusion Baking:**  
   Uses ray-casting from each pixel on the UV space to compute ambient occlusion and bent normal directions.
 
+- **Texture Output Settings:**  
+  The size of the output texture maps can be customised and a super sampling factor can be applied to help remove noise at lower resolutions.
+
+- **Map Types:**  
+  Can select to output either a Bent Normal Map, Occlusion Map or both.
+
 - **Customisable Sampling Options:**  
-  Configure ray sample count, maximum ray distance, occlusion threshold, and ray origin bias. Options for cosine-weighted sampling and enhanced tangent processing are available.
+  Configure ray sample count, maximum ray distance, occlusion threshold, and ray origin bias. Options for cosine-weighted sampling, tangent space and back-facing triangle processing are available.
 
 - **Efficient BVH Acceleration Structure:**  
   Builds a bounding volume hierarchy (BVH) for rapid occlusion testing during ray intersection.
@@ -30,7 +36,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
   Supports loading an external alpha texture to account for transparency in occlusion tests.
 
 - **Real-Time Preview & Progress Updates:**  
-  Displays a live preview of the baking process with progress information and estimated time remaining.
+  Displays a live preview of the baking process to show progress and displays a percentage complete indicator.
 
 - **User Interface Customisation:**  
   Toggle between light and dark modes, adjust highlight colours, and enable fast preview for more responsive updates.
@@ -59,20 +65,20 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
    Click the **Bake Maps** button to start the baking process. You can monitor progress via the live preview and window title updates.
 
 7. **Save the Output:**  
-   After the bake completes, you will be prompted to save the generated maps (either as a single image or separate bent normal and occlusion maps).
+   After the bake completes, you can now click the Save Maps button which will ask where to save them to.
 
 ## Configuration / Settings
 
 The application offers various configuration options, please read the [Wiki](https://github.com/LiftVortex/NormalSmith/wiki/Normal-Smith-Options) page for more details:
 
 - **Texture Dimensions:**  
-  Set the width and height of the output texture.
+  Set the width and height of the output texture and super sampling factor.
 
 - **Sampling Options:**  
   Configure ray sample count, maximum ray distance, occlusion threshold, and ray origin bias.
 
 - **Map Generation Options:**  
-  Enable or disable tangent space transformation, cosine distribution, and enhanced tangent processing.
+  Enable or disable tangent space transformation, cosine distribution, and back-facing triangle processing.
 
 - **Swizzle Options:**  
   Invert X, Y, or Z channels in the final colour output.
