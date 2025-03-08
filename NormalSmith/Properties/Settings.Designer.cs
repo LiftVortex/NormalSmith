@@ -286,5 +286,41 @@ namespace NormalSmith.Properties {
                 this["FastPreview"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("1")]
+        public int SupersampleFactor {
+            get {
+                return ((int)(this["SupersampleFactor"]));
+            }
+            set {
+                this["SupersampleFactor"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool BackfacingTris {
+            get {
+                return ((bool)(this["BackfacingTris"]));
+            }
+            set {
+                this["BackfacingTris"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int MeshSelectionIndex {
+            get {
+                return ((int)(this["MeshSelectionIndex"]));
+            }
+            set {
+                this["MeshSelectionIndex"] = value;
+            }
+        }
     }
 }

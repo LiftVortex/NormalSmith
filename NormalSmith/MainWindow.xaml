@@ -161,7 +161,7 @@
         <!-- Main UI Layout -->
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="340" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
@@ -171,9 +171,9 @@
                     <RowDefinition Height="40" />
                 </Grid.RowDefinitions>
                 <!-- Left Panel with Controls -->
-            <ScrollViewer Grid.Column="0" Grid.Row="0" Margin="10" VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <!-- Input Files Section -->
+                <ScrollViewer Grid.Column="0" Grid.Row="0" Margin="10" VerticalScrollBarVisibility="Auto" Padding="10">
+                    <StackPanel>
+                        <!-- Input Files Section -->
                         <GroupBox Header="Input Files" Margin="0,0,0,10">
                             <StackPanel Margin="5">
                                 <Button Name="btnLoadModel" Content="Load Model" Click="btnLoadModel_Click" Margin="0,0,0,5"
@@ -183,8 +183,8 @@
                                 <!-- Mesh Selection -->
                                 <GroupBox Header="Mesh Selection" Margin="0,0,0,10"
                   ToolTip="Select the specific mesh from the loaded model to be baked.">
-                                    <StackPanel Margin="5">
-                                        <ComboBox Name="cmbMeshSelection" Width="250" SelectionChanged="cmbMeshSelection_SelectionChanged"
+                                    <StackPanel Margin="0">
+                                        <ComboBox Name="cmbMeshSelection" Width="200" SelectionChanged="cmbMeshSelection_SelectionChanged"
                           ToolTip="Choose which mesh from the model to bake. The dropdown is populated after loading the model."/>
                                     </StackPanel>
                                 </GroupBox>
@@ -199,17 +199,34 @@
                         <!-- Output Settings Section -->
                         <GroupBox Header="Output Settings" Margin="0,0,0,10">
                             <StackPanel Margin="5">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                    <TextBlock Text="Texture Width:" VerticalAlignment="Center" Width="110"
-                       ToolTip="Specifies the width of the output texture in pixels. Adjust this value to control the resolution of the baked map."/>
-                                    <TextBox Name="txtWidth" Width="50" Text="1024"
-                     ToolTip="Enter the desired width (in pixels) for the baked texture. Higher values yield more detail but may increase processing time."/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Texture Height:" VerticalAlignment="Center" Width="110"
-                       ToolTip="Specifies the height of the output texture in pixels."/>
-                                    <TextBox Name="txtHeight" Width="50" Text="1024"
-                     ToolTip="Enter the desired height (in pixels) for the baked texture. Match this with the width for a square texture or adjust as needed."/>
+                                <Grid Margin="0,0,0,5">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Output Texture Width Row -->
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Output Texture Width: " VerticalAlignment="Center" ToolTip="Specifies the width of the output texture in pixels. Adjust this value to control the resolution of the baked map." Margin="0,0,0,5"/>
+                                    <TextBox Grid.Row="0" Grid.Column="1" Name="txtWidth" Text="1024" ToolTip="Enter the desired width (in pixels) for the baked texture. Higher values yield more detail but may increase processing time." TextAlignment="Center"  Margin="0,0,0,5" Height="30"/>
+
+                                    <!-- Output Texture Height Row -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Output Texture Height: " VerticalAlignment="Center" ToolTip="Specifies the height of the output texture in pixels." Margin="0,0,0,5"/>
+                                    <TextBox Grid.Row="1" Grid.Column="1" Name="txtHeight" Text="1024" ToolTip="Enter the desired height (in pixels) for the baked texture. Match this with the width for a square texture or adjust as needed." TextAlignment="Center"  Margin="0,0,0,5"/>
+                                </Grid>
+
+                                <!-- Supersample slider -->
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,5" VerticalAlignment="Center">
+                                    <TextBlock Text="Supersample Factor:" VerticalAlignment="Center" Width="140"
+                       ToolTip="Choose a factor for supersampling (e.g., 4x will process at 4x the resolution, then downsample and output at the resolution above). This can result in a much cleaner and less noisy result."/>
+                                    <Slider Name="sldSupersample" Minimum="1" Maximum="8" Value="1" TickFrequency="1"
+                    IsSnapToTickEnabled="True" Width="80" ValueChanged="sldSupersample_ValueChanged"/>
+                                    <!-- Display the current supersample factor -->
+                                    <TextBlock Name="txtSupersampleDisplay" VerticalAlignment="Center" Margin="10,0,0,0"
+                       Text="1×" ToolTip="Current supersample factor"/>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
@@ -218,16 +235,16 @@
                         <!-- UV Mapping Options Section -->
                         <GroupBox Header="UV Mapping Options" Margin="0,0,0,10">
                             <StackPanel Margin="5">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                    <TextBlock Text="Bent Normal/Occlusion Map UV:" VerticalAlignment="Center" Width="180"
+                                <StackPanel Orientation="Vertical" Margin="0,0,0,5">
+                                    <TextBlock Text="Bent Normal/Occlusion Map UV:" HorizontalAlignment="Left" VerticalAlignment="Center" Width="180"
                        ToolTip="Select the UV channel to use for the bent normal and occlusion maps. This channel should contain the UV layout appropriate for these maps."/>
-                                    <ComboBox Name="cmbBentMapUV" Width="100"
+                                    <ComboBox Name="cmbBentMapUV" Width="180" HorizontalAlignment="Left"
                       ToolTip="Choose the UV channel for the bent normal and occlusion maps from the available channels on the model."/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Alpha Map UV:" VerticalAlignment="Center" Width="180"
+                                <StackPanel Orientation="Vertical">
+                                    <TextBlock Text="Alpha Map UV:" HorizontalAlignment="Left" VerticalAlignment="Center" Width="180"
                        ToolTip="Select the UV channel to use for sampling the alpha values. This channel should contain the UV layout corresponding to your alpha texture."/>
-                                    <ComboBox Name="cmbAlphaMapUV" Width="100"
+                                    <ComboBox Name="cmbAlphaMapUV" Width="180" HorizontalAlignment="Left"
                       ToolTip="Choose the UV channel for the alpha map from the available channels on the model."/>
                                 </StackPanel>
                             </StackPanel>
@@ -235,10 +252,10 @@
 
 
                         <!-- Map Generation Options Section with Sub-Categories -->
-                    <GroupBox Header="Map Generation Options" Margin="0,0,0,10">
-                        <StackPanel Margin="5">
-                            <!-- Map Types -->
-                            <TextBlock Text="Map Types" FontWeight="Bold" Margin="0,0,0,5" />
+                        <GroupBox Header="Map Generation Options" Margin="0,0,0,10">
+                            <StackPanel Margin="5">
+                                <!-- Map Types -->
+                                <TextBlock Text="Map Types" FontWeight="Bold" Margin="0,0,0,5" />
                                 <StackPanel Orientation="Vertical" Margin="10,0,0,5">
                                     <CheckBox Name="chkGenerateBentNormal" Content="Generate Bent Normal Map" IsChecked="True" Margin="0,0,0,5"
               ToolTip="When enabled, the baking process will compute a bent normal map that captures the average unoccluded light direction at each surface point."/>
@@ -249,8 +266,8 @@
 
 
                                 <!-- Sampling Options -->
-                            <TextBlock Text="Sampling Options" FontWeight="Bold" Margin="0,10,0,5" />
-                            <StackPanel Orientation="Vertical" Margin="10,0,0,5">
+                                <TextBlock Text="Sampling Options" FontWeight="Bold" Margin="0,10,0,5" />
+                                <StackPanel Orientation="Vertical" Margin="10,0,0,5">
                                     <CheckBox Name="chkTangentSpace" Content="Use Tangent Space" IsChecked="True" Margin="0,0,0,5" ToolTip="Transforms the computed bent normals from world space into the surface’s local tangent space. When off, leaves the computed bent normals in world space."/>
                                     <CheckBox Name="chkCosineDistribution" Content="Use Cosine Distribution" IsChecked="True" Margin="0,0,0,5" ToolTip="Generates sample directions using a cosine-weighted distribution which biases rays toward the surface normal. When off, generates sample directions uniformly over the hemisphere which distributes rays evenly without bias."/>
                                     <CheckBox Name="chkBackfaceProcessing" Content="Process Back-Facing Triangles" IsChecked="False" Margin="0,0,0,0"
@@ -259,11 +276,11 @@
 
                                     <TextBlock Text="Occlusion Map" FontSize="14" FontWeight="DemiBold" Margin="0,10,0,5" />
                                     <CheckBox Name="chkClampOcclusion" Content="Lerp Occlusion Towards Threshold" IsChecked="True" Margin="0,0,0,5" ToolTip="Values lower than the Occlusion Threshold will be boosted towards the threshold. This has the effect of lightening the darker areas without removing them. When this is off, any occlusion values below the Occlusion Threshold will be brought up to the threshold. To completely disable, leave this off and reduce the threshold to 0."/>
+                                </StackPanel>
                             </StackPanel>
-                        </StackPanel>
-                    </GroupBox>
+                        </GroupBox>
 
-                    <!-- Swizzle Options Section -->
+                        <!-- Swizzle Options Section -->
                         <GroupBox Header="Swizzle Options" Margin="0,0,0,10">
                             <StackPanel Orientation="Horizontal" Margin="5">
                                 <CheckBox Name="chkInvertX" Content="Invert X" IsChecked="False" Margin="0,0,10,0"
@@ -279,40 +296,95 @@
                         <!-- Baking Options Section -->
                         <GroupBox Header="Baking Options" Margin="0,0,0,10">
                             <StackPanel Margin="5">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                    <TextBlock Text="Ray Sample Count:" VerticalAlignment="Center" Width="140" 
-                       ToolTip="Specifies the number of rays sampled per pixel. Increasing this value can reduce noise at the cost of performance."/>
-                                    <TextBox Name="txtRaySampleCount" Width="50" Text="64" 
-                     ToolTip="Number of rays used per pixel for baking. Higher values yield smoother results but increase bake time."/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                    <TextBlock Text="Max Ray Distance:" VerticalAlignment="Center" Width="140" 
-                       ToolTip="Defines the maximum distance a ray can travel. Rays beyond this distance are ignored."/>
-                                    <TextBox Name="txtMaxRayDistance" Width="50" Text="1000" 
-                     ToolTip="Maximum distance for ray intersection tests. Adjust based on the scale of your model."/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                    <TextBlock Text="Ray Origin Bias:" VerticalAlignment="Center" Width="140" 
-                       ToolTip="A small offset added to the ray origin to avoid self-intersection artifacts."/>
-                                    <TextBox Name="txtRayOriginBias" Width="50" Text="0.01" 
-                     ToolTip="Bias value to offset rays from the surface. Helps prevent rays from intersecting the originating surface."/>
-                                </StackPanel>
+                                <Grid Margin="0,0,0,5">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Ray Sample Count Row -->
+                                    <TextBlock Grid.Row="0" Grid.Column="0" 
+                                       Text="Ray Sample Count: " 
+                                       VerticalAlignment="Center" 
+                                       ToolTip="Specifies the number of rays sampled per pixel. Increasing this value can reduce noise at the cost of performance." 
+                                       Margin="0,0,0,5"/>
+                                    <TextBox Grid.Row="0" Grid.Column="1" 
+                                         Name="txtRaySampleCount" 
+                                         Text="64" 
+                                         ToolTip="Number of rays used per pixel for baking. Higher values yield smoother results but increase bake time." 
+                                         TextAlignment="Center"  
+                                         Margin="0,0,0,5" 
+                                         Height="30"/>
+
+                                    <!-- Max Ray Distance Row -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0" 
+                                       Text="Max Ray Distance: " 
+                                       VerticalAlignment="Center" 
+                                       ToolTip="Defines the maximum distance a ray can travel. Rays beyond this distance are ignored." 
+                                       Margin="0,0,0,5"/>
+                                    <TextBox Grid.Row="1" Grid.Column="1" 
+                                         Name="txtMaxRayDistance" 
+                                         Text="1000" 
+                                         ToolTip="Maximum distance for ray intersection tests. Adjust based on the scale of your model." 
+                                         TextAlignment="Center"  
+                                         Margin="0,0,0,5" 
+                                         Height="30"/>
+
+                                    <!-- Ray Origin Bias Row -->
+                                    <TextBlock Grid.Row="2" Grid.Column="0" 
+                                        Text="Ray Origin Bias: " 
+                                        VerticalAlignment="Center" 
+                                        ToolTip="A small offset added to the ray origin to avoid self-intersection artifacts." 
+                                        Margin="0,0,0,5"/>
+                                    <TextBox Grid.Row="2" Grid.Column="1" 
+                                         Name="txtRayOriginBias" 
+                                         Text="0.01" 
+                                         ToolTip="Bias value to offset rays from the surface. Helps prevent rays from intersecting the originating surface." 
+                                         TextAlignment="Center"  
+                                         Margin="0,0,0,5" 
+                                         Height="30"/>
+                                </Grid>
+
                                 <TextBlock Text="Occlusion Map" FontWeight="Bold" Margin="0,10,0,5" 
                    ToolTip="Settings related to generating the occlusion map."/>
-                                <StackPanel Orientation="Horizontal" Margin="10,0,0,5">
-                                    <TextBlock Text="Occlusion Threshold:" VerticalAlignment="Center" Width="140" 
-                       ToolTip="Threshold for occlusion; pixels with occlusion below this value may be clamped."/>
-                                    <TextBox Name="txtOcclusionThreshold" Width="50" Text="0.726" 
-                     ToolTip="Specifies the occlusion threshold used during baking. Adjust to fine-tune occlusion contrast."/>
-                                </StackPanel>
+                                <Grid Margin="10,0,0,5">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Occlusion Threshold Row -->
+                                    <TextBlock Grid.Row="0" Grid.Column="0" 
+                                       Text="Occlusion Threshold:" 
+                                       VerticalAlignment="Center" 
+                                       Width="140"
+                                       ToolTip="Threshold for occlusion; pixels with occlusion below this value may be clamped." 
+                                       Margin="0,0,0,5"/>
+                                    <TextBox Grid.Row="0" Grid.Column="1" 
+                                         Name="txtOcclusionThreshold" 
+                                         Text="0.726" 
+                                         ToolTip="Specifies the occlusion threshold used during baking. Adjust to fine-tune occlusion contrast." 
+                                         TextAlignment="Center"  
+                                         Margin="0,0,0,5" 
+                                         Height="30"/>
+                                </Grid>
+
                             </StackPanel>
                         </GroupBox>
 
                     </StackPanel>
-            </ScrollViewer>
+                </ScrollViewer>
 
-            <!-- Action Button -->
-            <Button Grid.Column="0" Grid.Row="1" Name="btnBake" Content="Bake Maps" Click="btnBake_Click" Margin="10,0,10,10" Height="30" VerticalAlignment="Bottom"/>
+                <!-- Action Button -->
+                <Button Grid.Column="0" Grid.Row="1" Name="btnBake" Content="Bake Maps" Click="btnBake_Click" Margin="10,0,10,10" Height="30" VerticalAlignment="Bottom"/>
 
             </Grid>
             <!-- Right Panel for Preview -->

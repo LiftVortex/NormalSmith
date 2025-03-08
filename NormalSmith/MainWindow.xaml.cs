@@ -157,6 +157,9 @@ namespace NormalSmith
             chkInvertZ.IsChecked = Properties.Settings.Default.SwizzleZ < 0;
             //chkEnhancedTangentProcessing.IsChecked = Properties.Settings.Default.EnhancedTangentProcessing;
             chkClampOcclusion.IsChecked = !Properties.Settings.Default.ClampOcclusion;
+            sldSupersample.Value = Properties.Settings.Default.SupersampleFactor;
+            txtSupersampleDisplay.Text = ((int)sldSupersample.Value).ToString() + "×";
+            chkBackfaceProcessing.IsChecked = Properties.Settings.Default.BackfacingTris;
 
             // Load fast preview option.
             fastPreviewEnabled = Properties.Settings.Default.FastPreview;
@@ -206,6 +209,17 @@ namespace NormalSmith
                 btnLoadModel.Content = "Load Model";
             }
 
+            // After populating the cmbMeshSelection (usually after the model is loaded):
+            int savedIndex = Properties.Settings.Default.MeshSelectionIndex;
+            if (cmbMeshSelection.Items.Count > savedIndex && savedIndex >= 0)
+            {
+                cmbMeshSelection.SelectedIndex = savedIndex;
+            }
+            else if (cmbMeshSelection.Items.Count > 0)
+            {
+                cmbMeshSelection.SelectedIndex = 0; // Default to the first mesh if the saved index is invalid.
+            }
+
             // Load last selected alpha texture using the AlphaTextureHelper.
             string lastAlphaPath = Properties.Settings.Default.LastAlphaPath;
             if (!string.IsNullOrEmpty(lastAlphaPath) && System.IO.File.Exists(lastAlphaPath))
@@ -245,6 +259,10 @@ namespace NormalSmith
             Properties.Settings.Default.SwizzleZ = (chkInvertZ.IsChecked == true) ? -1f : 1f;
             //Properties.Settings.Default.EnhancedTangentProcessing = (chkEnhancedTangentProcessing.IsChecked == true);
             Properties.Settings.Default.ClampOcclusion = (chkClampOcclusion.IsChecked == false);
+            Properties.Settings.Default.SupersampleFactor = (int)sldSupersample.Value;
+            Properties.Settings.Default.BackfacingTris = (chkBackfaceProcessing.IsChecked == true);
+            Properties.Settings.Default.MeshSelectionIndex = cmbMeshSelection.SelectedIndex;
+
 
             // Save dark mode state and highlight color.
             Properties.Settings.Default.IsDarkMode = menuDarkModeToggle.IsChecked == true;
@@ -314,6 +332,13 @@ namespace NormalSmith
             AARasterizer.AllowBackFacing = false;
         }
 
+        private void sldSupersample_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (txtSupersampleDisplay != null)
+            {
+                txtSupersampleDisplay.Text = ((int)sldSupersample.Value).ToString() + "×";
+            }
+        }
 
         /// <summary>
         /// Toggles dark mode and updates various UI resource brushes accordingly.
@@ -512,6 +537,7 @@ namespace NormalSmith
                 return;
             }
 
+            int supersampleFactor = (int)sldSupersample.Value;
             useTangentSpace = (chkTangentSpace.IsChecked == true);
             useCosineDistribution = (chkCosineDistribution.IsChecked == true);
             generateBentNormalMap = (chkGenerateBentNormal.IsChecked == true);
@@ -551,7 +577,8 @@ namespace NormalSmith
                     AlphaTextureHelper.SampleAlpha,
                     bmp => imgPreview.Source = BitmapToImageSource(bmp),
                     title => this.Title = title,
-                    action => Dispatcher.Invoke(action)
+                    action => Dispatcher.Invoke(action),
+                    supersampleFactor
                 );
 
                 btnBake.Content = "Bake Maps";

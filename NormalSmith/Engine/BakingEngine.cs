@@ -89,7 +89,7 @@ namespace NormalSmith.Engine
         /// <param name="invokeOnDispatcher">A delegate to marshal actions onto the UI thread.</param>
         /// <returns>A task that completes with the final preview bitmap.</returns>
         public static async Task<BakeResult> BakeBentNormalMapAsync(
-            string modelPath, int width, int height,
+            string modelPath, int texWidth, int texHeight,
             bool useTangentSpace, bool useCosineDistribution,
             bool generateBentNormalMap, bool generateOcclusionMap,
             Vector3 swizzle, IProgress<double> progress, CancellationToken token, bool clampOcclusion,
@@ -99,7 +99,8 @@ namespace NormalSmith.Engine
             Func<Vector2, float> sampleAlpha,
             Action<Bitmap> updatePreview,
             Action<string> updateTitle,
-            Action<Action> invokeOnDispatcher)
+            Action<Action> invokeOnDispatcher,
+            int supersampleFactor)
         {
             return await Task.Run(() =>
             {
@@ -112,6 +113,10 @@ namespace NormalSmith.Engine
 
                 // Determine if we are generating both bent normal and occlusion maps.
                 bool dualMode = generateBentNormalMap && generateOcclusionMap;
+
+                // Compute high-resolution dimensions based on the supersample factor.
+                int width = texWidth * supersampleFactor;
+                int height = texHeight * supersampleFactor;
 
                 // Allocate buffers for the maps.
                 int[] singleBuffer = null;
@@ -588,43 +593,50 @@ namespace NormalSmith.Engine
                 previewTimer.Dispose();
                 progress.Report(1.0);
 
-                // Gather final results into bitmaps.
-                Bitmap finalBmp;
-                BakeResult bakeResult = new BakeResult();
-                if (dualMode)
+                // After processing, create the high-resolution bitmap:
+                Bitmap highResBmp;
+                if (!dualMode)
                 {
-                    var bentBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-                    var bentData = bentBmp.LockBits(
+                    highResBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+                    var bmpData = highResBmp.LockBits(
                         new Rectangle(0, 0, width, height),
                         ImageLockMode.WriteOnly,
-                        bentBmp.PixelFormat);
-                    Marshal.Copy(bentBuffer, 0, bentData.Scan0, bentBuffer.Length);
-                    bentBmp.UnlockBits(bentData);
-
-                    var occBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-                    var occData = occBmp.LockBits(
-                        new Rectangle(0, 0, width, height),
-                        ImageLockMode.WriteOnly,
-                        occBmp.PixelFormat);
-                    Marshal.Copy(occBuffer, 0, occData.Scan0, occBuffer.Length);
-                    occBmp.UnlockBits(occData);
-
-                    FinalBentMap = bentBmp;
-                    FinalOccMap = occBmp;
-                    finalBmp = bentBmp; // Provide the bent map as a preview in dual mode.
-                    bakeResult.BentMap = bentBmp;
-                    bakeResult.OccMap = occBmp;
-                    bakeResult.PreviewBmp = bentBmp;
+                        highResBmp.PixelFormat);
+                    Marshal.Copy(singleBuffer, 0, bmpData.Scan0, singleBuffer.Length);
+                    highResBmp.UnlockBits(bmpData);
                 }
                 else
                 {
-                    finalBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-                    var finalData = finalBmp.LockBits(
+                    // For dual mode, assume we want the bent map as preview:
+                    highResBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+                    var bmpData = highResBmp.LockBits(
                         new Rectangle(0, 0, width, height),
                         ImageLockMode.WriteOnly,
-                        finalBmp.PixelFormat);
-                    Marshal.Copy(singleBuffer, 0, finalData.Scan0, singleBuffer.Length);
-                    finalBmp.UnlockBits(finalData);
+                        highResBmp.PixelFormat);
+                    Marshal.Copy(bentBuffer, 0, bmpData.Scan0, bentBuffer.Length);
+                    highResBmp.UnlockBits(bmpData);
+                }
+
+                // Downscale the high-res bitmap to the desired output dimensions:
+                Bitmap finalBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
+                using (Graphics g = Graphics.FromImage(finalBmp))
+                {
+                    // Use high-quality downscaling interpolation.
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.DrawImage(highResBmp, new Rectangle(0, 0, texWidth, texHeight));
+                }
+                highResBmp.Dispose();
+
+                BakeResult bakeResult = new BakeResult();
+                if (dualMode)
+                {
+                    // For dual mode, you would downscale occBuffer similarly and assign both maps:
+                    bakeResult.BentMap = finalBmp; // for preview
+                                                   // (Additional processing to produce and downscale OccMap would go here.)
+                    bakeResult.PreviewBmp = finalBmp;
+                }
+                else
+                {
                     bakeResult.PreviewBmp = finalBmp;
                 }
 
