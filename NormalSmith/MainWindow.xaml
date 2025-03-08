@@ -177,7 +177,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="40" />
+                    <RowDefinition Height="80" />
                 </Grid.RowDefinitions>
                 <!-- Left Panel with Controls -->
                 <ScrollViewer Grid.Column="0" Grid.Row="0" Margin="10" VerticalScrollBarVisibility="Auto" Padding="10">
@@ -392,8 +392,27 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- Action Button -->
-                <Button Grid.Column="0" Grid.Row="1" Name="btnBake" Content="Bake Maps" Click="btnBake_Click" Margin="10,0,10,10" Height="30" VerticalAlignment="Bottom"/>
+                <Grid Grid.Column="0" Grid.Row="1">
+                    <Grid.RowDefinitions>
+                        <!-- Row 0: Control content (ScrollViewer) -->
+                        <RowDefinition Height="*" />
+                        <!-- Row 1: Bake Maps button -->
+                        <RowDefinition Height="40" />
+                        <!-- Row 2: Save Maps button -->
+                        <RowDefinition Height="40" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Left Panel with Controls -->
+                    <ScrollViewer Grid.Row="0" Margin="10" VerticalScrollBarVisibility="Auto" Padding="10">
+                        <!-- Your existing control content goes here -->
+                    </ScrollViewer>
+
+                    <!-- Bake Maps Button -->
+                    <Button Grid.Row="1" Name="btnBake" Content="Bake Maps" Click="btnBake_Click" Margin="10,0,10,5" Height="30" VerticalAlignment="Center"/>
+
+                    <!-- Save Maps Button (initially disabled) -->
+                    <Button Grid.Row="2" Name="btnSave" Content="Save Maps" Click="btnSave_Click" Margin="10,0,10,10" Height="30" VerticalAlignment="Center" IsEnabled="False"/>
+                </Grid>
 
             </Grid>
             <!-- Right Panel for Preview -->

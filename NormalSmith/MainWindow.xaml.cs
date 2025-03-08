@@ -91,6 +91,10 @@ namespace NormalSmith
 
         // Global list of occluder triangles used for occlusion testing.
         private List<TriangleData> occluderTriangles;
+
+        // Save the latest bake results
+        private BakeResult lastBakeResult = null;
+
         #endregion
 
         #region Private Types
@@ -357,6 +361,57 @@ namespace NormalSmith
             creditsWindow.Owner = this; // Optional: makes it a child window
             creditsWindow.ShowDialog(); // Use ShowDialog() for a modal window
         }
+        private void btnSave_Click(object sender, RoutedEventArgs e)
+        {
+            if (lastBakeResult == null)
+            {
+                System.Windows.MessageBox.Show("No baked maps are available to save.", "Save Maps", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // If both Bent Normal and Occlusion maps are generated:
+            if (lastBakeResult.BentMap != null)
+            {
+                // Save Bent Normal Map
+                var dlgBent = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "PNG Image|*.png|JPEG Image|*.jpg|Bitmap Image|*.bmp",
+                    FileName = "BentNormalMap.png"
+                };
+                if (dlgBent.ShowDialog() == true)
+                {
+                    System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Png;
+                    string ext = System.IO.Path.GetExtension(dlgBent.FileName).ToLower();
+                    if (ext == ".jpg" || ext == ".jpeg")
+                        format = System.Drawing.Imaging.ImageFormat.Jpeg;
+                    else if (ext == ".bmp")
+                        format = System.Drawing.Imaging.ImageFormat.Bmp;
+                    lastBakeResult.BentMap.Save(dlgBent.FileName, format);
+                    System.Windows.MessageBox.Show("Bent Normal Map saved to: " + dlgBent.FileName);
+                }
+            }
+            
+            if (lastBakeResult.OccMap != null)
+            {
+                // Save Occlusion Map
+                var dlgOcc = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "PNG Image|*.png|JPEG Image|*.jpg|Bitmap Image|*.bmp",
+                    FileName = "OcclusionMap.png"
+                };
+                if (dlgOcc.ShowDialog() == true)
+                {
+                    System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Png;
+                    string ext = System.IO.Path.GetExtension(dlgOcc.FileName).ToLower();
+                    if (ext == ".jpg" || ext == ".jpeg")
+                        format = System.Drawing.Imaging.ImageFormat.Jpeg;
+                    else if (ext == ".bmp")
+                        format = System.Drawing.Imaging.ImageFormat.Bmp;
+                    lastBakeResult.OccMap.Save(dlgOcc.FileName, format);
+                    System.Windows.MessageBox.Show("Occlusion Map saved to: " + dlgOcc.FileName);
+                }
+            }
+        }
 
 
         /// <summary>
@@ -494,10 +549,10 @@ namespace NormalSmith
                                     var result = System.Windows.MessageBox.Show(
                                         $"A new version ({latestVersion}) is available. Would you like to download it?",
                                         "Update Available",
-                                        MessageBoxButton.YesNo,
+                                        MessageBoxButton.OKCancel,
                                         MessageBoxImage.Information);
 
-                                    if (result == MessageBoxResult.Yes)
+                                    if (result == MessageBoxResult.OK)
                                     {
                                         Process.Start(new ProcessStartInfo("https://github.com/LiftVortex/NormalSmith/releases/latest/download/NormalSmith-Build.zip")
                                         {
@@ -709,67 +764,22 @@ namespace NormalSmith
                     supersampleFactor
                 );
 
+                // Bake process completed successfully
                 btnBake.Content = "Bake Maps";
                 bakeCancellationTokenSource = null;
                 taskbarInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.None;
                 this.Title = "Bake Complete!";
 
-                // Save the generated maps.
-                if (generateBentNormalMap && generateOcclusionMap)
-                {
-                    var dlgBent = new Microsoft.Win32.SaveFileDialog
-                    {
-                        Filter = "PNG Image|*.png|JPEG Image|*.jpg|Bitmap Image|*.bmp",
-                        FileName = "BentNormalMap.png"
-                    };
-                    if (dlgBent.ShowDialog() == true)
-                    {
-                        System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Png;
-                        string ext = System.IO.Path.GetExtension(dlgBent.FileName).ToLower();
-                        if (ext == ".jpg" || ext == ".jpeg")
-                            format = System.Drawing.Imaging.ImageFormat.Jpeg;
-                        else if (ext == ".bmp")
-                            format = System.Drawing.Imaging.ImageFormat.Bmp;
-                        bakeResult.BentMap.Save(dlgBent.FileName, format);
-                        System.Windows.MessageBox.Show("Bent Normal Map saved to: " + dlgBent.FileName);
-                    }
+                // Store the bake result for later saving
+                lastBakeResult = bakeResult;
 
-                    var dlgOcc = new Microsoft.Win32.SaveFileDialog
-                    {
-                        Filter = "PNG Image|*.png|JPEG Image|*.jpg|Bitmap Image|*.bmp",
-                        FileName = "OcclusionMap.png"
-                    };
-                    if (dlgOcc.ShowDialog() == true)
-                    {
-                        System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Png;
-                        string ext = System.IO.Path.GetExtension(dlgOcc.FileName).ToLower();
-                        if (ext == ".jpg" || ext == ".jpeg")
-                            format = System.Drawing.Imaging.ImageFormat.Jpeg;
-                        else if (ext == ".bmp")
-                            format = System.Drawing.Imaging.ImageFormat.Bmp;
-                        bakeResult.OccMap.Save(dlgOcc.FileName, format);
-                        System.Windows.MessageBox.Show("Occlusion Map saved to: " + dlgOcc.FileName);
-                    }
-                }
-                else
-                {
-                    var dlg = new Microsoft.Win32.SaveFileDialog
-                    {
-                        Filter = "PNG Image|*.png|JPEG Image|*.jpg|Bitmap Image|*.bmp",
-                        FileName = generateOcclusionMap ? "OcclusionMap.png" : "BentNormalMap.png"
-                    };
-                    if (dlg.ShowDialog() == true)
-                    {
-                        System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Png;
-                        string ext = System.IO.Path.GetExtension(dlg.FileName).ToLower();
-                        if (ext == ".jpg" || ext == ".jpeg")
-                            format = System.Drawing.Imaging.ImageFormat.Jpeg;
-                        else if (ext == ".bmp")
-                            format = System.Drawing.Imaging.ImageFormat.Bmp;
-                        bakeResult.PreviewBmp.Save(dlg.FileName, format);
-                        System.Windows.MessageBox.Show("Image saved to: " + dlg.FileName);
-                    }
-                }
+                // Enable the Save Maps button so that the user can now save the baked maps at their leisure.
+                btnSave.IsEnabled = true;
+
+                // Notify the user that the bake is complete.
+                System.Windows.MessageBox.Show("Bake complete! The Save Maps button is now enabled.", "Bake Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+
+
             }
             catch (OperationCanceledException)
             {

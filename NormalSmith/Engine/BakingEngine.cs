@@ -594,53 +594,92 @@ namespace NormalSmith.Engine
                 progress.Report(1.0);
 
                 // After processing, create the high-resolution bitmap:
-                Bitmap highResBmp;
+                // After processing, create the final output bitmap(s)
                 if (!dualMode)
                 {
-                    highResBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+                    // Single mode: only one map is generated.
+                    Bitmap highResBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
                     var bmpData = highResBmp.LockBits(
                         new Rectangle(0, 0, width, height),
                         ImageLockMode.WriteOnly,
                         highResBmp.PixelFormat);
                     Marshal.Copy(singleBuffer, 0, bmpData.Scan0, singleBuffer.Length);
                     highResBmp.UnlockBits(bmpData);
+
+                    // Downscale the high-res bitmap to the desired output dimensions:
+                    Bitmap finalBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
+                    using (Graphics g = Graphics.FromImage(finalBmp))
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.DrawImage(highResBmp, new Rectangle(0, 0, texWidth, texHeight));
+                    }
+                    highResBmp.Dispose();
+
+                    // Create the BakeResult and assign the appropriate map based on which flag is true.
+                    BakeResult bakeResult = new BakeResult();
+                    if (generateBentNormalMap && !generateOcclusionMap)
+                    {
+                        bakeResult.BentMap = finalBmp;
+                    }
+                    else if (generateOcclusionMap && !generateBentNormalMap)
+                    {
+                        bakeResult.OccMap = finalBmp;
+                    }
+                    bakeResult.PreviewBmp = finalBmp;
+                    return bakeResult;
                 }
                 else
                 {
-                    // For dual mode, assume we want the bent map as preview:
-                    highResBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-                    var bmpData = highResBmp.LockBits(
+                    // Dual mode: both Bent and Occlusion maps are generated.
+
+                    // Create separate high-resolution bitmaps for bent and occlusion maps.
+                    Bitmap highResBentBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+                    Bitmap highResOccBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+
+                    // Copy the bentBuffer into its bitmap.
+                    var bentData = highResBentBmp.LockBits(
                         new Rectangle(0, 0, width, height),
                         ImageLockMode.WriteOnly,
-                        highResBmp.PixelFormat);
-                    Marshal.Copy(bentBuffer, 0, bmpData.Scan0, bentBuffer.Length);
-                    highResBmp.UnlockBits(bmpData);
+                        highResBentBmp.PixelFormat);
+                    Marshal.Copy(bentBuffer, 0, bentData.Scan0, bentBuffer.Length);
+                    highResBentBmp.UnlockBits(bentData);
+
+                    // Copy the occBuffer into its bitmap.
+                    var occData = highResOccBmp.LockBits(
+                        new Rectangle(0, 0, width, height),
+                        ImageLockMode.WriteOnly,
+                        highResOccBmp.PixelFormat);
+                    Marshal.Copy(occBuffer, 0, occData.Scan0, occBuffer.Length);
+                    highResOccBmp.UnlockBits(occData);
+
+                    // Downscale the bent bitmap.
+                    Bitmap finalBentBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
+                    using (Graphics g = Graphics.FromImage(finalBentBmp))
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.DrawImage(highResBentBmp, new Rectangle(0, 0, texWidth, texHeight));
+                    }
+                    highResBentBmp.Dispose();
+
+                    // Downscale the occlusion bitmap.
+                    Bitmap finalOccBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
+                    using (Graphics g = Graphics.FromImage(finalOccBmp))
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.DrawImage(highResOccBmp, new Rectangle(0, 0, texWidth, texHeight));
+                    }
+                    highResOccBmp.Dispose();
+
+                    // Create the BakeResult with both maps.
+                    BakeResult bakeResult = new BakeResult
+                    {
+                        BentMap = finalBentBmp,    // Bent normal map.
+                        OccMap = finalOccBmp,      // Occlusion map.
+                        PreviewBmp = finalBentBmp  // Preview uses the bent map (or you can combine them as needed).
+                    };
+                    return bakeResult;
                 }
 
-                // Downscale the high-res bitmap to the desired output dimensions:
-                Bitmap finalBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
-                using (Graphics g = Graphics.FromImage(finalBmp))
-                {
-                    // Use high-quality downscaling interpolation.
-                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                    g.DrawImage(highResBmp, new Rectangle(0, 0, texWidth, texHeight));
-                }
-                highResBmp.Dispose();
-
-                BakeResult bakeResult = new BakeResult();
-                if (dualMode)
-                {
-                    // For dual mode, you would downscale occBuffer similarly and assign both maps:
-                    bakeResult.BentMap = finalBmp; // for preview
-                                                   // (Additional processing to produce and downscale OccMap would go here.)
-                    bakeResult.PreviewBmp = finalBmp;
-                }
-                else
-                {
-                    bakeResult.PreviewBmp = finalBmp;
-                }
-
-                return bakeResult;
             }, token);
         }
 
