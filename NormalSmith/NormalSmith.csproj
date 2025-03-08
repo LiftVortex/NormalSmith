@@ -9,6 +9,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Icon\Output.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>0.2.0</Version>
+    <AssemblyInformationalVersion>0.2.0</AssemblyInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

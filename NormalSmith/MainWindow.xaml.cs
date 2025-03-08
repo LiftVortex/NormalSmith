@@ -4,8 +4,11 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing; // For System.Drawing.Bitmap and System.Drawing.Color
 using System.Drawing.Imaging; // For System.Drawing.Imaging.PixelFormat
+using System.Net.Http;
 using System.Numerics;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -128,7 +131,7 @@ namespace NormalSmith
         /// <summary>
         /// Loads persistent settings and initializes the UI on window load.
         /// </summary>
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             // Load dark mode preference.
             bool isDarkMode = Properties.Settings.Default.IsDarkMode;
@@ -161,6 +164,7 @@ namespace NormalSmith
             sldSupersample.Value = Properties.Settings.Default.SupersampleFactor;
             txtSupersampleDisplay.Text = ((int)sldSupersample.Value).ToString() + "×";
             chkBackfaceProcessing.IsChecked = Properties.Settings.Default.BackfacingTris;
+            chkAutoUpdate.IsChecked = Properties.Settings.Default.AutoCheckUpdates;
 
             // Load fast preview option.
             fastPreviewEnabled = Properties.Settings.Default.FastPreview;
@@ -233,6 +237,12 @@ namespace NormalSmith
             {
                 txtAlphaPath.Text = "No alpha texture loaded";
                 btnLoadAlphaTexture.Content = "Load Alpha Texture";
+            }
+
+            if (Properties.Settings.Default.AutoCheckUpdates)
+            {
+                // Run the update check without prompting if no update is found.
+                await CheckForUpdatesAsync(promptIfUpToDate: false);
             }
         }
 
@@ -436,6 +446,92 @@ namespace NormalSmith
                 UseShellExecute = true
             });
         }
+        private async void MenuCheckForUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            await CheckForUpdatesAsync(promptIfUpToDate: true);
+        }
+        private void MenuAutoCheckUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            Properties.Settings.Default.AutoCheckUpdates = chkAutoUpdate.IsChecked;
+            Properties.Settings.Default.Save();
+        }
+
+
+        private async Task CheckForUpdatesAsync(bool promptIfUpToDate = true)
+        {
+            try
+            {
+                using (var httpClient = new HttpClient())
+                {
+                    // GitHub API requires a user-agent header.
+                    httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("NormalSmith-App");
+                    string apiUrl = "https://api.github.com/repos/LiftVortex/NormalSmith/releases/latest";
+                    var response = await httpClient.GetAsync(apiUrl);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string jsonString = await response.Content.ReadAsStringAsync();
+                        using JsonDocument jsonDoc = JsonDocument.Parse(jsonString);
+                        JsonElement root = jsonDoc.RootElement;
+
+                        if (root.TryGetProperty("tag_name", out JsonElement tagNameElement))
+                        {
+                            string latestTag = tagNameElement.GetString()?.Trim();
+
+                            // Remove a leading "v" if it exists (our tags now are numeric, e.g., "0.2.1")
+                            if (!string.IsNullOrEmpty(latestTag) && latestTag.StartsWith("v", StringComparison.InvariantCultureIgnoreCase))
+                            {
+                                latestTag = latestTag.Substring(1);
+                            }
+
+                            // Get the current version from the executing assembly.
+                            Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+
+                            if (Version.TryParse(latestTag, out Version latestVersion))
+                            {
+                                if (latestVersion > currentVersion)
+                                {
+                                    var result = System.Windows.MessageBox.Show(
+                                        $"A new version ({latestVersion}) is available. Would you like to download it?",
+                                        "Update Available",
+                                        MessageBoxButton.YesNo,
+                                        MessageBoxImage.Information);
+
+                                    if (result == MessageBoxResult.Yes)
+                                    {
+                                        Process.Start(new ProcessStartInfo("https://github.com/LiftVortex/NormalSmith/releases/latest/download/NormalSmith-Build.zip")
+                                        {
+                                            UseShellExecute = true
+                                        });
+                                    }
+                                }
+                                else if (promptIfUpToDate)
+                                {
+                                    System.Windows.MessageBox.Show("Your app is up-to-date.", "No Update Available", MessageBoxButton.OK, MessageBoxImage.Information);
+                                }
+                            }
+                            else
+                            {
+                                System.Windows.MessageBox.Show($"Unable to parse the latest version: '{latestTag}'", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                            }
+                        }
+                        else
+                        {
+                            System.Windows.MessageBox.Show("The latest release data is missing version information.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                    }
+                    else
+                    {
+                        System.Windows.MessageBox.Show("Failed to check for updates.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Error checking for updates: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
 
         /// <summary>
         /// Opens a file dialog to load a 3D model, imports the scene, and populates mesh and UV options.

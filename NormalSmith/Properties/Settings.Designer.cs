@@ -193,7 +193,7 @@ namespace NormalSmith.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.01")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
         public float RayOriginBias {
             get {
                 return ((float)(this["RayOriginBias"]));
@@ -320,6 +320,18 @@ namespace NormalSmith.Properties {
             }
             set {
                 this["MeshSelectionIndex"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool AutoCheckUpdates {
+            get {
+                return ((bool)(this["AutoCheckUpdates"]));
+            }
+            set {
+                this["AutoCheckUpdates"] = value;
             }
         }
     }

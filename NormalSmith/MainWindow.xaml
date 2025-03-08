@@ -152,10 +152,13 @@
         <!-- Top Menu with Dark Mode Toggle -->
         <Menu DockPanel.Dock="Top" Background="{DynamicResource MenuBackgroundBrush}">
             <MenuItem Header="Options" Foreground="{DynamicResource ControlForegroundBrush}">
+                <MenuItem Header="Check for Update" Click="MenuCheckForUpdate_Click" Foreground="Black"/>
+                <MenuItem Header="Check For Updates on Start" x:Name="chkAutoUpdate" Foreground="Black"
+                  IsCheckable="True"
+                  Click="MenuAutoCheckUpdates_Click"/>
                 <MenuItem x:Name="menuDarkModeToggle" Header="Dark Mode" IsCheckable="True" Click="menuDarkModeToggle_Click" Foreground="Black"/>
                 <MenuItem Header="Set Highlight Color" Click="menuSetHighlightColor_Click" Foreground="Black"/>
                 <MenuItem x:Name="chkFastPreview" Header="Fast Preview (50ms)" IsCheckable="True" Click="fastPreviewModeToggle_Click" Foreground="Black"/>
-                <MenuItem Header="Download Update" Click="MenuDownloadRelease_Click" Foreground="Black"/>
                 <MenuItem Header="Documentation" Foreground="Black">
                     <MenuItem Header="README" Click="MenuReadme_Click" Foreground="Black"/>
                     <MenuItem Header="Wiki" Click="MenuWiki_Click" Foreground="Black"/>
