@@ -340,6 +340,14 @@ namespace NormalSmith
             }
         }
 
+        private void MenuCredits_Click(object sender, RoutedEventArgs e)
+        {
+            CreditsWindow creditsWindow = new CreditsWindow();
+            creditsWindow.Owner = this; // Optional: makes it a child window
+            creditsWindow.ShowDialog(); // Use ShowDialog() for a modal window
+        }
+
+
         /// <summary>
         /// Toggles dark mode and updates various UI resource brushes accordingly.
         /// </summary>

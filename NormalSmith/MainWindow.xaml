@@ -151,10 +151,11 @@
     <DockPanel>
         <!-- Top Menu with Dark Mode Toggle -->
         <Menu DockPanel.Dock="Top" Background="{DynamicResource MenuBackgroundBrush}">
-            <MenuItem Header="Options" Foreground="{DynamicResource ButtonForegroundBrush}">
+            <MenuItem Header="Options" Foreground="{DynamicResource ControlForegroundBrush}">
                 <MenuItem x:Name="menuDarkModeToggle" Header="Dark Mode" IsCheckable="True" Click="menuDarkModeToggle_Click" Foreground="Black"/>
                 <MenuItem Header="Set Highlight Color" Click="menuSetHighlightColor_Click" Foreground="Black"/>
                 <MenuItem x:Name="chkFastPreview" Header="Fast Preview (50ms)" IsCheckable="True" Click="fastPreviewModeToggle_Click" Foreground="Black"/>
+                <MenuItem Header="Credits" Click="MenuCredits_Click" Foreground="Black"/>
             </MenuItem>
         </Menu>
 

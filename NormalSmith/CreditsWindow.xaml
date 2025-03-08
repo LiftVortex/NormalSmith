@@ -1,0 +1,40 @@
+﻿<Window x:Class="NormalSmith.CreditsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Credits" Height="300" Width="400"
+        Background="{DynamicResource WindowBackgroundBrush}">
+    <ScrollViewer Margin="10">
+        <StackPanel>
+            <!-- App Name / Title -->
+            <TextBlock Text="Normal Smith" 
+                       FontSize="16" 
+                       FontWeight="Bold" 
+                       Margin="0,0,0,10"/>
+            <!-- Copyright Info -->
+            <TextBlock Text="Copyright © 2025 Lift Vortex" 
+                       Margin="0,0,0,10"/>
+            <!-- GitHub Link -->
+            <TextBlock Text="GitHub Repository:"/>
+            <TextBlock Margin="0,0,0,10">
+                <Hyperlink NavigateUri="https://github.com/LiftVortex/NormalSmith"
+                           RequestNavigate="Hyperlink_RequestNavigate"
+                           Foreground="{DynamicResource ControlForegroundBrush}">
+                    https://github.com/LiftVortex/NormalSmith
+                </Hyperlink>
+            </TextBlock>
+            <!-- Acknowledgements -->
+            <TextBlock Text="Acknowledgements:" 
+                       FontWeight="Bold" 
+                       Margin="0,10,0,5"/>
+            <TextBlock Text="Assimp and AssimpNet – Thanks to the Assimp community for providing the robust model importing capabilities." 
+                       TextWrapping="Wrap"
+                       Margin="5,0,0,5"/>
+            <TextBlock Text="WPF and .NET Community – Appreciation to the developers and contributors who continue to improve the .NET ecosystem." 
+                       TextWrapping="Wrap"
+                       Margin="5,0,0,5"/>
+            <TextBlock Text="Inspiration and Contributions – Thanks to all contributors and users who provide feedback and help improve Normal Smith." 
+                       TextWrapping="Wrap"
+                       Margin="5,0,0,5"/>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

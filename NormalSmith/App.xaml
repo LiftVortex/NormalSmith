@@ -4,6 +4,10 @@
              xmlns:local="clr-namespace:NormalSmith"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <!-- Dynamic Resource Definitions for Light Theme -->
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F3F3F3" />
+        <SolidColorBrush x:Key="MenuBackgroundBrush" Color="#F3F3F3" />
+        <SolidColorBrush x:Key="ControlBackgroundBrush" Color="White" />
+        <SolidColorBrush x:Key="ControlForegroundBrush" Color="Black" />
     </Application.Resources>
 </Application>
