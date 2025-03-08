@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing; // For System.Drawing.Bitmap and System.Drawing.Color
 using System.Drawing.Imaging; // For System.Drawing.Imaging.PixelFormat
 using System.Numerics;
@@ -411,6 +412,29 @@ namespace NormalSmith
                 Resources["ButtonHoverBackgroundBrush"] = new SolidColorBrush(DarkenColor(newHighlight, 0.8));
                 Resources["ButtonPressedBackgroundBrush"] = new SolidColorBrush(DarkenColor(newHighlight, 0.6));
             }
+        }
+
+        private void MenuReadme_Click(object sender, RoutedEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo("https://github.com/LiftVortex/NormalSmith")
+            {
+                UseShellExecute = true
+            });
+        }
+
+        private void MenuWiki_Click(object sender, RoutedEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo("https://github.com/LiftVortex/NormalSmith/wiki/01-%E2%80%90-Normal-Smith-Options")
+            {
+                UseShellExecute = true
+            });
+        }
+        private void MenuDownloadRelease_Click(object sender, RoutedEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo("https://github.com/LiftVortex/NormalSmith/releases/latest/download/NormalSmith-Build.zip")
+            {
+                UseShellExecute = true
+            });
         }
 
         /// <summary>

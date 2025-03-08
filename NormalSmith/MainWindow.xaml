@@ -155,6 +155,11 @@
                 <MenuItem x:Name="menuDarkModeToggle" Header="Dark Mode" IsCheckable="True" Click="menuDarkModeToggle_Click" Foreground="Black"/>
                 <MenuItem Header="Set Highlight Color" Click="menuSetHighlightColor_Click" Foreground="Black"/>
                 <MenuItem x:Name="chkFastPreview" Header="Fast Preview (50ms)" IsCheckable="True" Click="fastPreviewModeToggle_Click" Foreground="Black"/>
+                <MenuItem Header="Download Update" Click="MenuDownloadRelease_Click" Foreground="Black"/>
+                <MenuItem Header="Documentation" Foreground="Black">
+                    <MenuItem Header="README" Click="MenuReadme_Click" Foreground="Black"/>
+                    <MenuItem Header="Wiki" Click="MenuWiki_Click" Foreground="Black"/>
+                </MenuItem>
                 <MenuItem Header="Credits" Click="MenuCredits_Click" Foreground="Black"/>
             </MenuItem>
         </Menu>
