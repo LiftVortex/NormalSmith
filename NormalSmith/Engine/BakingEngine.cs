@@ -10,7 +10,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using Assimp;
-using System.Drawing; // For PointF, Bitmap, Rectangle
+using System.Drawing;
 
 // Alias to resolve ambiguity between Assimp and System.Numerics:
 using NumericsMatrix = System.Numerics.Matrix4x4;

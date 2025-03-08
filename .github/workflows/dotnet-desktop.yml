@@ -147,9 +147,6 @@ jobs:
           prerelease: ${{ endsWith(github.ref, 'p') }}
           body: |
             ### Overview
-            ${{ steps.commit.outputs.commit_message }}
-
-            ### Changes
             ${{ steps.commit_titles.outputs.commit_titles }}
 
             ### Instructions
