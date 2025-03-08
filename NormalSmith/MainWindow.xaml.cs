@@ -304,6 +304,17 @@ namespace NormalSmith
             previewInterval = fastPreviewEnabled ? 50 : 500;
         }
 
+        private void chkBackfaceProcessing_Checked(object sender, RoutedEventArgs e)
+        {
+            AARasterizer.AllowBackFacing = true;
+        }
+
+        private void chkBackfaceProcessing_Unchecked(object sender, RoutedEventArgs e)
+        {
+            AARasterizer.AllowBackFacing = false;
+        }
+
+
         /// <summary>
         /// Toggles dark mode and updates various UI resource brushes accordingly.
         /// </summary>

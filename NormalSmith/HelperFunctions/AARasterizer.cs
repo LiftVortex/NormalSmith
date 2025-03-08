@@ -12,6 +12,8 @@ namespace NormalSmith.HelperFunctions
 
     public static class AARasterizer
     {
+        public static bool AllowBackFacing { get; set; } = false;
+
         /// <summary>
         /// Single-buffer 2x2 AA rasterizer:
         /// sampleFunc: (x, y, bary, uv) => returns ARGB int
@@ -59,7 +61,7 @@ namespace NormalSmith.HelperFunctions
                             float w1 = EdgeFunction(p2, p0, new PointF(sampleX, sampleY));
                             float w2 = EdgeFunction(p0, p1, new PointF(sampleX, sampleY));
 
-                            if (w0 >= 0 && w1 >= 0 && w2 >= 0)
+                            if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (AllowBackFacing && (w0 <= 0 && w1 <= 0 && w2 <= 0)))
                             {
                                 float invArea = 1f / area;
                                 float alpha = w0 * invArea;
@@ -162,7 +164,7 @@ namespace NormalSmith.HelperFunctions
                             float w1 = EdgeFunction(p2, p0, new PointF(sampleX, sampleY));
                             float w2 = EdgeFunction(p0, p1, new PointF(sampleX, sampleY));
 
-                            if (w0 >= 0 && w1 >= 0 && w2 >= 0)
+                            if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (AllowBackFacing && (w0 <= 0 && w1 <= 0 && w2 <= 0)))
                             {
                                 float invA = 1f / area;
                                 float alpha = w0 * invA;

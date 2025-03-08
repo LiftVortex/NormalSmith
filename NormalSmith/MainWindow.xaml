@@ -244,6 +244,7 @@
               ToolTip="When enabled, the baking process will compute a bent normal map that captures the average unoccluded light direction at each surface point."/>
                                     <CheckBox Name="chkGenerateOcclusion" Content="Generate Occlusion Map" IsChecked="True" Margin="0,0,0,5"
               ToolTip="When enabled, the baking process will compute an occlusion map to indicate how much ambient light is blocked at each surface point."/>
+                                    <!-- New toggle for backface processing -->
                                 </StackPanel>
 
 
@@ -252,6 +253,10 @@
                             <StackPanel Orientation="Vertical" Margin="10,0,0,5">
                                     <CheckBox Name="chkTangentSpace" Content="Use Tangent Space" IsChecked="True" Margin="0,0,0,5" ToolTip="Transforms the computed bent normals from world space into the surface’s local tangent space. When off, leaves the computed bent normals in world space."/>
                                     <CheckBox Name="chkCosineDistribution" Content="Use Cosine Distribution" IsChecked="True" Margin="0,0,0,5" ToolTip="Generates sample directions using a cosine-weighted distribution which biases rays toward the surface normal. When off, generates sample directions uniformly over the hemisphere which distributes rays evenly without bias."/>
+                                    <CheckBox Name="chkBackfaceProcessing" Content="Process Back-Facing Triangles" IsChecked="False" Margin="0,0,0,0"
+          ToolTip="When enabled, the baking process will include back-facing (flipped normal) triangles."
+          Checked="chkBackfaceProcessing_Checked" Unchecked="chkBackfaceProcessing_Unchecked"/>
+
                                     <TextBlock Text="Occlusion Map" FontSize="14" FontWeight="DemiBold" Margin="0,10,0,5" />
                                     <CheckBox Name="chkClampOcclusion" Content="Lerp Occlusion Towards Threshold" IsChecked="True" Margin="0,0,0,5" ToolTip="Values lower than the Occlusion Threshold will be boosted towards the threshold. This has the effect of lightening the darker areas without removing them. When this is off, any occlusion values below the Occlusion Threshold will be brought up to the threshold. To completely disable, leave this off and reduce the threshold to 0."/>
                             </StackPanel>
