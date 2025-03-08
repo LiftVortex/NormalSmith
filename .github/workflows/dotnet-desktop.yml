@@ -113,8 +113,8 @@ jobs:
         id: commit_titles
         shell: bash
         run: |
-          # Ensure all tags are fetched
-          git fetch --tags
+          # Force fetch all tags to update local tags.
+          git fetch --tags --force
           # Try to find the previous tag (skip the current one)
           PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
           echo "Previous tag: $PREV_TAG"
