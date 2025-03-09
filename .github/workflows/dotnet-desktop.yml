@@ -49,6 +49,14 @@ jobs:
         run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }} /p:UseSharedCompilation=false /p:Version=${{ steps.sanitize_tag.outputs.sanitized_tag }} /p:AssemblyInformationalVersion=${{ steps.sanitize_tag.outputs.sanitized_tag }} /p:OutDir="$env:GITHUB_WORKSPACE\build\"
         shell: pwsh
 
+      - name: Organize updater files
+        shell: pwsh
+        run: |
+          # Create the destination folder "Updater" inside the build folder
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\build\Updater"
+          # Move the updater files into the Updater folder
+          Move-Item -Path "$env:GITHUB_WORKSPACE\build\NormalSmithUpdater.*" -Destination "$env:GITHUB_WORKSPACE\build\Updater\" -Force
+
       - name: Sign the Executables (Release only)
         if: ${{ matrix.configuration == 'Release' }}
         shell: pwsh
