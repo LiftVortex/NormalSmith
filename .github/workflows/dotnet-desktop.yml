@@ -79,6 +79,12 @@ jobs:
           Write-Host "Cleaning up certificate file..."
           Remove-Item -Path $certPath
 
+      - name: Copy updater files to build folder
+        shell: pwsh
+        run: |
+          Copy-Item -Path "$env:GITHUB_WORKSPACE\Update.ps1" -Destination "$env:GITHUB_WORKSPACE\build\" -Force
+          Copy-Item -Path "$env:GITHUB_WORKSPACE\updater.config.json" -Destination "$env:GITHUB_WORKSPACE\build\" -Force
+
       - name: Compress build folder (Release only)
         if: ${{ matrix.configuration == 'Release' }}
         shell: pwsh
