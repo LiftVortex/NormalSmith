@@ -510,7 +510,25 @@ namespace NormalSmith
             Properties.Settings.Default.AutoCheckUpdates = chkAutoUpdate.IsChecked;
             Properties.Settings.Default.Save();
         }
+        private static void CopyDirectory(string sourceDir, string destinationDir)
+        {
+            // Create the destination directory if it doesn't exist.
+            System.IO.Directory.CreateDirectory(destinationDir);
 
+            // Copy all files.
+            foreach (string filePath in System.IO.Directory.GetFiles(sourceDir))
+            {
+                string destFilePath = System.IO.Path.Combine(destinationDir, System.IO.Path.GetFileName(filePath));
+                System.IO.File.Copy(filePath, destFilePath, true);
+            }
+
+            // Recursively copy subdirectories.
+            foreach (string directory in System.IO.Directory.GetDirectories(sourceDir))
+            {
+                string destSubDir = System.IO.Path.Combine(destinationDir, System.IO.Path.GetFileName(directory));
+                CopyDirectory(directory, destSubDir);
+            }
+        }
 
         private async Task CheckForUpdatesAsync(bool promptIfUpToDate = true)
         {
@@ -554,20 +572,44 @@ namespace NormalSmith
 
                                     if (result == MessageBoxResult.OK)
                                     {
-                                        // Determine the updater script path (assumed to be in the same folder as the exe)
-                                        string updaterScriptPath = System.IO.Path.Combine(
-                                            AppDomain.CurrentDomain.BaseDirectory, "Update.ps1");
+                                        // Determine the install directory (where NormalSmith.exe is located)
+                                        string installDir = AppDomain.CurrentDomain.BaseDirectory;
 
-                                        // Launch PowerShell with the updater script.
-                                        Process.Start(new ProcessStartInfo("powershell",
-                                            $"-ExecutionPolicy Bypass -File \"{updaterScriptPath}\"")
+                                        // Trim the trailing backslash if it exists.
+                                        installDir = installDir.TrimEnd(System.IO.Path.DirectorySeparatorChar);
+
+                                        // Determine the path to the Updater folder (assumed to be next to the exe)
+                                        string updaterFolderPath = System.IO.Path.Combine(installDir, "Updater");
+
+                                        // Define a temporary folder for the updater
+                                        string tempUpdaterFolder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NormalSmithUpdater");
+
+                                        // If the temporary folder exists, delete it to ensure a clean copy
+                                        if (System.IO.Directory.Exists(tempUpdaterFolder))
                                         {
+                                            System.IO.Directory.Delete(tempUpdaterFolder, true);
+                                        }
+
+                                        // Copy the entire Updater folder to the temporary location
+                                        CopyDirectory(updaterFolderPath, tempUpdaterFolder);
+
+                                        // Define the path to the updater executable in the temp folder
+                                        // (Assuming the executable is named NormalSmithUpdater.exe)
+                                        string tempUpdaterExe = System.IO.Path.Combine(tempUpdaterFolder, "NormalSmithUpdater.exe");
+
+                                        // Launch the updater from the temporary location and pass the install directory as an argument.
+                                        Process.Start(new ProcessStartInfo
+                                        {
+                                            FileName = tempUpdaterExe,
+                                            Arguments = $"\"{installDir}\"", // pass the install folder path
                                             UseShellExecute = true
                                         });
 
-                                        // Close the main application so that files are not locked.
+                                        // Close the main application so that files can be overwritten.
                                         System.Windows.Application.Current.Shutdown();
+
                                     }
+
 
                                 }
                                 else if (promptIfUpToDate)

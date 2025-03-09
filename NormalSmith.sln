@@ -5,6 +5,8 @@ VisualStudioVersion = 17.12.35527.113
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NormalSmith", "NormalSmith\NormalSmith.csproj", "{05295AFF-A3E9-46F8-BE79-421003787EAF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NormalSmithUpdater", "NormalSmithUpdater\NormalSmithUpdater.csproj", "{44A0DFFA-AE75-458A-8A1F-FD41FEE3AC09}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{05295AFF-A3E9-46F8-BE79-421003787EAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{05295AFF-A3E9-46F8-BE79-421003787EAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{05295AFF-A3E9-46F8-BE79-421003787EAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{44A0DFFA-AE75-458A-8A1F-FD41FEE3AC09}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{44A0DFFA-AE75-458A-8A1F-FD41FEE3AC09}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{44A0DFFA-AE75-458A-8A1F-FD41FEE3AC09}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{44A0DFFA-AE75-458A-8A1F-FD41FEE3AC09}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

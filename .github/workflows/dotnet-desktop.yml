@@ -49,7 +49,7 @@ jobs:
         run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }} /p:UseSharedCompilation=false /p:Version=${{ steps.sanitize_tag.outputs.sanitized_tag }} /p:AssemblyInformationalVersion=${{ steps.sanitize_tag.outputs.sanitized_tag }} /p:OutDir="$env:GITHUB_WORKSPACE\build\"
         shell: pwsh
 
-      - name: Sign the Executable (Release only)
+      - name: Sign the Executables (Release only)
         if: ${{ matrix.configuration == 'Release' }}
         shell: pwsh
         run: |
@@ -61,10 +61,11 @@ jobs:
           Write-Host "Listing build directory contents for debugging..."
           Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse
           
-          Write-Host "Locating the executable..."
-          $exePath = "$env:GITHUB_WORKSPACE\build\NormalSmith.exe"
-          if (-Not (Test-Path $exePath)) {
-            Write-Error "Executable not found at path: $exePath"
+          # Sign the main application executable
+          Write-Host "Locating the main executable..."
+          $mainExePath = "$env:GITHUB_WORKSPACE\build\NormalSmith.exe"
+          if (-Not (Test-Path $mainExePath)) {
+            Write-Error "Main executable not found at path: $mainExePath"
             exit 1
           }
           
@@ -73,8 +74,19 @@ jobs:
           Write-Host "Adding $signtoolPath to PATH"
           $env:PATH += ";$signtoolPath"
           
-          Write-Host "Signing the executable..."
-          signtool sign /f $certPath /p "${{ secrets.PFX_KEY }}" /tr http://timestamp.digicert.com /td sha256 /fd sha256 $exePath
+          Write-Host "Signing the main executable..."
+          signtool sign /f $certPath /p "${{ secrets.PFX_KEY }}" /tr http://timestamp.digicert.com /td sha256 /fd sha256 $mainExePath
+          
+          # Sign the updater executable
+          Write-Host "Locating the updater executable..."
+          $updaterExePath = "$env:GITHUB_WORKSPACE\build\Updater\NormalSmithUpdater.exe"
+          if (-Not (Test-Path $updaterExePath)) {
+            Write-Error "Updater executable not found at path: $updaterExePath"
+            exit 1
+          }
+          
+          Write-Host "Signing the updater executable..."
+          signtool sign /f $certPath /p "${{ secrets.PFX_KEY }}" /tr http://timestamp.digicert.com /td sha256 /fd sha256 $updaterExePath
           
           Write-Host "Cleaning up certificate file..."
           Remove-Item -Path $certPath
@@ -82,8 +94,10 @@ jobs:
       - name: Copy updater files to build folder
         shell: pwsh
         run: |
-          Copy-Item -Path "$env:GITHUB_WORKSPACE\Update.ps1" -Destination "$env:GITHUB_WORKSPACE\build\" -Force
-          Copy-Item -Path "$env:GITHUB_WORKSPACE\updater.config.json" -Destination "$env:GITHUB_WORKSPACE\build\" -Force
+          # Create the destination folder "Updater" inside the build folder
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\build\Updater"
+          # Copy all files from the updater's build output into the "Updater" folder
+          Copy-Item -Path "$env:GITHUB_WORKSPACE\NormalSmithUpdater\bin\Release\Updater\*" -Destination "$env:GITHUB_WORKSPACE\build\Updater" -Recurse -Force
 
       - name: Compress build folder (Release only)
         if: ${{ matrix.configuration == 'Release' }}
