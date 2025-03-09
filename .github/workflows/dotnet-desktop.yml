@@ -126,9 +126,9 @@ jobs:
           echo "Previous tag: $PREV_TAG"
           if [ -z "$PREV_TAG" ]; then
             # No previous tag found, list all commits as markdown links and filter out unwanted titles.
-            COMMITS=$(git log --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md")
+            COMMITS=$(git log --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md" || true)
           else
-            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md")
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md" || true)
           fi
           echo "Commit titles with links:"
           echo "$COMMITS"
