@@ -547,18 +547,28 @@ namespace NormalSmith
                                 if (latestVersion > currentVersion)
                                 {
                                     var result = System.Windows.MessageBox.Show(
-                                        $"A new version ({latestVersion}) is available. Would you like to download it?",
+                                        $"A new version ({latestVersion}) is available. Would you like to update now? \n\nNote: This closes the app and launches the updater.\nThis downloads the latest release from Github and overwrites the existing files then relaunches the updated app.",
                                         "Update Available",
                                         MessageBoxButton.OKCancel,
                                         MessageBoxImage.Information);
 
                                     if (result == MessageBoxResult.OK)
                                     {
-                                        Process.Start(new ProcessStartInfo("https://github.com/LiftVortex/NormalSmith/releases/latest/download/NormalSmith-Build.zip")
+                                        // Determine the updater script path (assumed to be in the same folder as the exe)
+                                        string updaterScriptPath = System.IO.Path.Combine(
+                                            AppDomain.CurrentDomain.BaseDirectory, "Update.ps1");
+
+                                        // Launch PowerShell with the updater script.
+                                        Process.Start(new ProcessStartInfo("powershell",
+                                            $"-ExecutionPolicy Bypass -File \"{updaterScriptPath}\"")
                                         {
                                             UseShellExecute = true
                                         });
+
+                                        // Close the main application so that files are not locked.
+                                        System.Windows.Application.Current.Shutdown();
                                     }
+
                                 }
                                 else if (promptIfUpToDate)
                                 {
