@@ -6,7 +6,8 @@
     <ScrollViewer Margin="10">
         <StackPanel>
             <!-- App Name / Title -->
-            <TextBlock Text="Normal Smith" 
+            <TextBlock Name="CreditsTitle"
+                       Text="Normal Smith" 
                        FontSize="16" 
                        FontWeight="Bold" 
                        Margin="0,0,0,10"/>

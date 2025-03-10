@@ -49,6 +49,8 @@ namespace NormalSmith
         // Thread-local random generator for use in parallel processing.
         private static readonly ThreadLocal<Random> threadRandom = new ThreadLocal<Random>(() => new Random(Guid.NewGuid().GetHashCode()));
 
+        string newTitle = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+
         // Model and scene data.
         private Scene loadedScene;            // Holds the loaded 3D scene.
         private int selectedMeshIndex = 0;    // Index of the currently selected mesh.
@@ -131,6 +133,8 @@ namespace NormalSmith
         /// </summary>
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            this.Title = "Normal Smith v" + newTitle.Remove(newTitle.Length-2);
+
             // Load dark mode preference.
             bool isDarkMode = Properties.Settings.Default.IsDarkMode;
             menuDarkModeToggle.IsChecked = isDarkMode;
@@ -814,7 +818,7 @@ namespace NormalSmith
                 btnBake.Content = "Bake Maps";
                 bakeCancellationTokenSource = null;
                 taskbarInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.None;
-                this.Title = "Bake Complete!";
+                this.Title = "Normal Smith v" + newTitle.Remove(newTitle.Length - 2);
 
                 // Store the bake result for later saving
                 lastBakeResult = bakeResult;
@@ -832,7 +836,7 @@ namespace NormalSmith
                 btnBake.Content = "Bake Maps";
                 bakeCancellationTokenSource = null;
                 taskbarInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.None;
-                this.Title = "Normal Smith";
+                this.Title = "Normal Smith v" + newTitle.Remove(newTitle.Length - 2);
             }
             catch (Exception ex)
             {
