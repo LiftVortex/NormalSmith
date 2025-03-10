@@ -128,19 +128,30 @@ namespace NormalSmith.Engine
                     occBuffer = new int[width * height];
                     for (int i = 0; i < width * height; i++)
                     {
-                        bentBuffer[i] = unchecked((int)0xFF000000);
-                        occBuffer[i] = unchecked((int)0xFF000000);
+                        // Set background for bent normal map to 7A7FFF (with full alpha: 0xFF7A7FFF)
+                        bentBuffer[i] = unchecked((int)0xFF7A7FFF);
+                        // Set background for occlusion map to B9B9B9 (with full alpha: 0xFFB9B9B9)
+                        occBuffer[i] = unchecked((int)0xFFB9B9B9);
                     }
                 }
                 else
                 {
                     singleBuffer = new int[width * height];
-                    for (int i = 0; i < singleBuffer.Length; i++)
-                        singleBuffer[i] = unchecked((int)0xFF000000);
+                    // In single mode, determine which map is being generated and set the background accordingly.
+                    if (generateBentNormalMap && !generateOcclusionMap)
+                    {
+                        for (int i = 0; i < singleBuffer.Length; i++)
+                            singleBuffer[i] = unchecked((int)0xFF7A7FFF);
+                    }
+                    else if (generateOcclusionMap && !generateBentNormalMap)
+                    {
+                        for (int i = 0; i < singleBuffer.Length; i++)
+                            singleBuffer[i] = unchecked((int)0xFFB9B9B9);
+                    }
                 }
 
                 // Ensure there is at least one mesh in the scene.
-                if(scene != null)
+                if (scene != null)
                 {
                     if (scene.MeshCount == 0 || scene == null)
                         throw new Exception("No mesh found in file.");
