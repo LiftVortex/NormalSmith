@@ -16,6 +16,7 @@ using System.Drawing;
 using NumericsMatrix = System.Numerics.Matrix4x4;
 using NormalSmith.DataStructure;
 using NormalSmith.HelperFunctions;
+using System.Windows.Forms;
 
 namespace NormalSmith.Engine
 {
@@ -100,7 +101,7 @@ namespace NormalSmith.Engine
             Action<Bitmap> updatePreview,
             Action<string> updateTitle,
             Action<Action> invokeOnDispatcher,
-            int supersampleFactor)
+            int supersampleFactor, int uvPadding)
         {
             return await Task.Run(() =>
             {
@@ -149,6 +150,12 @@ namespace NormalSmith.Engine
                             singleBuffer[i] = unchecked((int)0xFFB9B9B9);
                     }
                 }
+
+                // Allocate an island mask buffer (initialize to -1 indicating background)
+                int[] islandBuffer = new int[width * height];
+                for (int i = 0; i < islandBuffer.Length; i++)
+                    islandBuffer[i] = -1;
+
 
                 // Ensure there is at least one mesh in the scene.
                 if (scene != null)
@@ -279,6 +286,9 @@ namespace NormalSmith.Engine
                 // Set up progress tracking and preview updates.
                 int processedTriangles = 0;
                 int totalTriangles = baseMesh.FaceCount;
+                // Compute per–triangle UV island IDs using the bent UV channel.
+                int[] triangleIsland = ComputeUVIslands(baseMesh, bentUVIndex);
+
                 double smoothingFactor = 0.8; // Adjust between 0 and 1; lower values smooth more.
                 double lastProgress = 0.0;
                 DateTime lastUpdateTime = startTime;
@@ -437,6 +447,8 @@ namespace NormalSmith.Engine
                         // Depending on dual-mode, we rasterize and compute differently.
                         if (dualMode)
                         {
+                            int currentIsland = triangleIsland[triIndex];
+
                             AARasterizer.RasterizeTriangleToDualBufferAA(
                                 bentBuffer,
                                 occBuffer,
@@ -447,6 +459,10 @@ namespace NormalSmith.Engine
                                 p2,
                                 (int x, int y, Vector3 bary, PointF uvInterp, out int bentColor, out int occColor) =>
                                 {
+                                    // Record the island ID for this pixel.
+                                    int index = x + y * width;
+                                    islandBuffer[index] = currentIsland;
+
                                     Vector3 interpNormal = Vector3.Normalize(
                                         bary.X * nor0 + bary.Y * nor1 + bary.Z * nor2);
                                     Vector3 posInterp = bary.X * pos0 + bary.Y * pos1 + bary.Z * pos2;
@@ -508,6 +524,8 @@ namespace NormalSmith.Engine
                         }
                         else
                         {
+                            int currentIsland = triangleIsland[triIndex];
+
                             AARasterizer.RasterizeTriangleToBufferAA(
                                 singleBuffer,
                                 width,
@@ -517,6 +535,9 @@ namespace NormalSmith.Engine
                                 p2,
                                 (x, y, bary, uvInterp) =>
                                 {
+                                    int index = x + y * width;
+                                    islandBuffer[index] = currentIsland;
+
                                     Vector3 interpNormal = Vector3.Normalize(
                                         bary.X * nor0 + bary.Y * nor1 + bary.Z * nor2);
                                     Vector3 posInterp = bary.X * pos0 + bary.Y * pos1 + bary.Z * pos2;
@@ -619,12 +640,23 @@ namespace NormalSmith.Engine
 
                     // Downscale the high-res bitmap to the desired output dimensions:
                     Bitmap finalBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
+
                     using (Graphics g = Graphics.FromImage(finalBmp))
                     {
                         g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
                         g.DrawImage(highResBmp, new Rectangle(0, 0, texWidth, texHeight));
                     }
                     highResBmp.Dispose();
+
+                    // Downscale and process the island mask.
+                    int[] finalIslandMask = DownscaleIslandMask(islandBuffer, width, height, texWidth, texHeight);
+                    int[] dilatedIslandMask = DilateIslandMaskBFS(finalIslandMask, texWidth, texHeight, uvPadding);
+
+                    // Choose the appropriate background color (for example, use the bent map background if generating bent normals).
+                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF7A7FFF) : unchecked((int)0xFFB9B9B9);
+
+                    // Apply island–guided color filling to the final bitmap.
+                    finalBmp = ApplyIslandColorDilationBFS(finalBmp, dilatedIslandMask, texWidth, texHeight, uvPadding, bgColor);
 
                     // Create the BakeResult and assign the appropriate map based on which flag is true.
                     BakeResult bakeResult = new BakeResult();
@@ -665,12 +697,23 @@ namespace NormalSmith.Engine
 
                     // Downscale the bent bitmap.
                     Bitmap finalBentBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
+
                     using (Graphics g = Graphics.FromImage(finalBentBmp))
                     {
                         g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
                         g.DrawImage(highResBentBmp, new Rectangle(0, 0, texWidth, texHeight));
                     }
                     highResBentBmp.Dispose();
+
+                    // Downscale and process the island mask.
+                    int[] finalIslandMask = DownscaleIslandMask(islandBuffer, width, height, texWidth, texHeight);
+                    int[] dilatedIslandMask = DilateIslandMaskBFS(finalIslandMask, texWidth, texHeight, uvPadding);
+
+                    // Choose the appropriate background color (for example, use the bent map background if generating bent normals).
+                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF7A7FFF) : unchecked((int)0xFFB9B9B9);
+
+                    // Apply island–guided color filling to the final bitmap.
+                    finalBentBmp = ApplyIslandColorDilationBFS(finalBentBmp, dilatedIslandMask, texWidth, texHeight, uvPadding, bgColor);
 
                     // Downscale the occlusion bitmap.
                     Bitmap finalOccBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
@@ -680,6 +723,16 @@ namespace NormalSmith.Engine
                         g.DrawImage(highResOccBmp, new Rectangle(0, 0, texWidth, texHeight));
                     }
                     highResOccBmp.Dispose();
+
+                    // Downscale and process the island mask for the occlusion map.
+                    int[] finalIslandMask2 = DownscaleIslandMask(islandBuffer, width, height, texWidth, texHeight);
+                    int[] dilatedIslandMask2 = DilateIslandMaskBFS(finalIslandMask2, texWidth, texHeight, uvPadding);
+
+                    // Choose the occlusion background color.
+                    int bgColor2 = unchecked((int)0xFFB9B9B9);
+
+                    // Apply island–guided color filling to the occlusion bitmap.
+                    finalOccBmp = ApplyIslandColorDilationBFS(finalOccBmp, dilatedIslandMask2, texWidth, texHeight, uvPadding, bgColor2);
 
                     // Create the BakeResult with both maps.
                     BakeResult bakeResult = new BakeResult
@@ -697,6 +750,263 @@ namespace NormalSmith.Engine
         #endregion
 
         #region Helper Methods
+
+        private static Bitmap ApplyUvPadding(Bitmap source, int padding)
+        {
+            Bitmap padded = (Bitmap)source.Clone();
+            int width = padded.Width;
+            int height = padded.Height;
+
+            // Perform iterative dilation for the specified padding amount.
+            for (int iter = 0; iter < padding; iter++)
+            {
+                Bitmap temp = (Bitmap)padded.Clone();
+                for (int x = 1; x < width - 1; x++)
+                {
+                    for (int y = 1; y < height - 1; y++)
+                    {
+                        Color current = padded.GetPixel(x, y);
+                        // Assume the background is pure black (0xFF000000). Adjust if necessary.
+                        if (current.ToArgb() == unchecked((int)0xFF000000))
+                        {
+                            // Check neighboring pixels.
+                            Color left = padded.GetPixel(x - 1, y);
+                            Color right = padded.GetPixel(x + 1, y);
+                            Color up = padded.GetPixel(x, y - 1);
+                            Color down = padded.GetPixel(x, y + 1);
+                            // If any neighbor is non-background, set this pixel to that color.
+                            if (left.ToArgb() != unchecked((int)0xFF000000))
+                                temp.SetPixel(x, y, left);
+                            else if (right.ToArgb() != unchecked((int)0xFF000000))
+                                temp.SetPixel(x, y, right);
+                            else if (up.ToArgb() != unchecked((int)0xFF000000))
+                                temp.SetPixel(x, y, up);
+                            else if (down.ToArgb() != unchecked((int)0xFF000000))
+                                temp.SetPixel(x, y, down);
+                        }
+                    }
+                }
+                padded.Dispose();
+                padded = temp;
+            }
+            return padded;
+        }
+
+        private static int[] DownscaleIslandMask(int[] highResMask, int highWidth, int highHeight, int finalWidth, int finalHeight)
+        {
+            int[] finalMask = new int[finalWidth * finalHeight];
+            for (int y = 0; y < finalHeight; y++)
+            {
+                for (int x = 0; x < finalWidth; x++)
+                {
+                    int srcX = (int)(x / (float)finalWidth * highWidth);
+                    int srcY = (int)(y / (float)finalHeight * highHeight);
+                    finalMask[x + y * finalWidth] = highResMask[srcX + srcY * highWidth];
+                }
+            }
+            return finalMask;
+        }
+
+        private static int[] DilateIslandMaskBFS(int[] mask, int width, int height, int uvPadding)
+        {
+            int[] result = (int[])mask.Clone();
+
+            // 1) Initialize a queue with all non-background pixels, distance = 0
+            Queue<(int x, int y, int dist, int islandId)> queue = new Queue<(int, int, int, int)>();
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int index = x + y * width;
+                    if (result[index] != -1)
+                    {
+                        queue.Enqueue((x, y, 0, result[index]));
+                    }
+                }
+            }
+
+            // Offsets for neighbors: left, right, up, down
+            int[] offsets = { -1, 1, -width, width };
+
+            // 2) BFS until queue is empty
+            while (queue.Count > 0)
+            {
+                var (cx, cy, dist, cid) = queue.Dequeue();
+
+                // If we haven't reached the padding limit yet, expand neighbors
+                if (dist < uvPadding)
+                {
+                    foreach (int off in offsets)
+                    {
+                        int nx = cx, ny = cy;
+                        if (off == -1) nx = cx - 1;
+                        else if (off == 1) nx = cx + 1;
+                        else if (off == -width) ny = cy - 1;
+                        else if (off == width) ny = cy + 1;
+
+                        // Check bounds
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                            continue;
+
+                        int neighborIndex = nx + ny * width;
+                        // If neighbor is background, fill it and enqueue
+                        if (result[neighborIndex] == -1)
+                        {
+                            result[neighborIndex] = cid;
+                            queue.Enqueue((nx, ny, dist + 1, cid));
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private static Bitmap ApplyIslandColorDilationBFS(
+            Bitmap source,
+            int[] islandMask,
+            int width,
+            int height,
+            int uvPadding,
+            int backgroundColor)
+        {
+            Bitmap result = (Bitmap)source.Clone();
+
+            // Build a queue of all non-background pixels with a starting distance of 0.
+            // Each entry: (x, y, dist, islandId, color)
+            Queue<(int x, int y, int dist, int islandId, Color color)> queue =
+                new Queue<(int, int, int, int, Color)>();
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int idx = x + y * width;
+                    int islandId = islandMask[idx];
+                    Color c = result.GetPixel(x, y);
+                    if (c.ToArgb() != backgroundColor && islandId != -1)
+                        queue.Enqueue((x, y, 0, islandId, c));
+                }
+            }
+
+            // Offsets for 4-neighbor connectivity: left, right, up, down.
+            int[] offsets = new int[] { -1, 1, -width, width };
+
+            while (queue.Count > 0)
+            {
+                var (cx, cy, dist, islandId, color) = queue.Dequeue();
+
+                // Only expand if we haven't reached the uvPadding limit.
+                if (dist >= uvPadding)
+                    continue;
+
+                foreach (int off in offsets)
+                {
+                    int nx = cx, ny = cy;
+                    if (off == -1) nx = cx - 1;
+                    else if (off == 1) nx = cx + 1;
+                    else if (off == -width) ny = cy - 1;
+                    else if (off == width) ny = cy + 1;
+
+                    // Check bounds.
+                    if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                        continue;
+
+                    int nidx = nx + ny * width;
+                    // If neighbor is background and belongs to the same island, fill it.
+                    if (islandMask[nidx] == islandId && result.GetPixel(nx, ny).ToArgb() == backgroundColor)
+                    {
+                        result.SetPixel(nx, ny, color);
+                        queue.Enqueue((nx, ny, dist + 1, islandId, color));
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Computes a UV island ID for each triangle using the given UV channel.
+        /// Two triangles are grouped together if they share an edge in UV space (within a small tolerance).
+        /// </summary>
+        private static int[] ComputeUVIslands(Assimp.Mesh mesh, int uvChannel, float tolerance = 0.001f)
+        {
+            int triangleCount = mesh.FaceCount;
+            int[] parent = new int[triangleCount];
+            for (int i = 0; i < triangleCount; i++)
+                parent[i] = i;
+
+            // Union–find helpers
+            int Find(int i)
+            {
+                while (parent[i] != i)
+                    i = parent[i];
+                return i;
+            }
+            void Union(int i, int j)
+            {
+                int rootI = Find(i);
+                int rootJ = Find(j);
+                if (rootI != rootJ)
+                    parent[rootJ] = rootI;
+            }
+
+            // Quantize a UV coordinate to an integer pair.
+            (int, int) Quantize(Vector3D uv)
+            {
+                int qx = (int)Math.Round(uv.X * 1000);
+                int qy = (int)Math.Round(uv.Y * 1000);
+                return (qx, qy);
+            }
+
+            // Build a dictionary mapping an edge key to the list of triangle indices sharing that edge.
+            var edgeDict = new Dictionary<(int, int, int, int), List<int>>();
+            for (int tri = 0; tri < triangleCount; tri++)
+            {
+                Face face = mesh.Faces[tri];
+                if (face.IndexCount != 3)
+                    continue;
+                Vector3D uv0 = mesh.TextureCoordinateChannels[uvChannel][face.Indices[0]];
+                Vector3D uv1 = mesh.TextureCoordinateChannels[uvChannel][face.Indices[1]];
+                Vector3D uv2 = mesh.TextureCoordinateChannels[uvChannel][face.Indices[2]];
+                var q0 = Quantize(uv0);
+                var q1 = Quantize(uv1);
+                var q2 = Quantize(uv2);
+
+                // Define each edge as an order–independent tuple.
+                var edges = new List<(int, int, int, int)>
+        {
+            (Math.Min(q0.Item1, q1.Item1), Math.Min(q0.Item2, q1.Item2),
+             Math.Max(q0.Item1, q1.Item1), Math.Max(q0.Item2, q1.Item2)),
+            (Math.Min(q1.Item1, q2.Item1), Math.Min(q1.Item2, q2.Item2),
+             Math.Max(q1.Item1, q2.Item1), Math.Max(q1.Item2, q2.Item2)),
+            (Math.Min(q2.Item1, q0.Item1), Math.Min(q2.Item2, q0.Item2),
+             Math.Max(q2.Item1, q0.Item1), Math.Max(q2.Item2, q0.Item2))
+        };
+
+                foreach (var edge in edges)
+                {
+                    if (!edgeDict.TryGetValue(edge, out var list))
+                    {
+                        list = new List<int>();
+                        edgeDict[edge] = list;
+                    }
+                    list.Add(tri);
+                }
+            }
+            // Union triangles sharing an edge.
+            foreach (var kvp in edgeDict)
+            {
+                List<int> tris = kvp.Value;
+                for (int i = 1; i < tris.Count; i++)
+                    Union(tris[0], tris[i]);
+            }
+            // Flatten the union–find structure.
+            int[] islandIDs = new int[triangleCount];
+            for (int i = 0; i < triangleCount; i++)
+                islandIDs[i] = Find(i);
+            return islandIDs;
+        }
 
         /// <summary>
         /// Locates the node that references the specified mesh index in the Assimp scene hierarchy.

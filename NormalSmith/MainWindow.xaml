@@ -212,6 +212,7 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -225,6 +226,12 @@
                                     <!-- Output Texture Height Row -->
                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Output Texture Height: " VerticalAlignment="Center" ToolTip="Specifies the height of the output texture in pixels." Margin="0,0,0,5"/>
                                     <TextBox Grid.Row="1" Grid.Column="1" Name="txtHeight" Text="1024" ToolTip="Enter the desired height (in pixels) for the baked texture. Match this with the width for a square texture or adjust as needed." TextAlignment="Center"  Margin="0,0,0,5"/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="UV Padding (px):" VerticalAlignment="Center"
+                                                ToolTip="Number of pixels to pad the UV islands."/>
+                                    <TextBox Grid.Row="2" Grid.Column="1" Name="txtUvPadding" Text="2" TextAlignment="Center"
+                                            ToolTip="Enter the number of pixels for UV padding."/>
+
                                 </Grid>
 
                                 <!-- Supersample slider -->

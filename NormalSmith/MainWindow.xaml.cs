@@ -770,6 +770,11 @@ namespace NormalSmith
                 return;
             }
 
+            if (!int.TryParse(txtUvPadding.Text, out int uvPadding))
+            {
+                uvPadding = 0;
+            }
+
             int supersampleFactor = (int)sldSupersample.Value;
             useTangentSpace = (chkTangentSpace.IsChecked == true);
             useCosineDistribution = (chkCosineDistribution.IsChecked == true);
@@ -811,7 +816,8 @@ namespace NormalSmith
                     bmp => imgPreview.Source = BitmapToImageSource(bmp),
                     title => this.Title = title,
                     action => Dispatcher.Invoke(action),
-                    supersampleFactor
+                    supersampleFactor,
+                    uvPadding
                 );
 
                 // Bake process completed successfully
