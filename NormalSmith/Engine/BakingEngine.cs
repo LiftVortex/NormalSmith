@@ -336,27 +336,37 @@ namespace NormalSmith.Engine
                                 smoothedThroughput = smoothingFactor * smoothedThroughput + (1.0 - smoothingFactor) * rawThroughput;
                             }
                         }
-
+                        // 2) Compute fraction of work done (0 to 1)
+                        double fractionComplete = (double)currentProcessed / totalTriangles;
                         // Update "last check" for the next callback
                         lastProcessedTriangles = currentProcessed;
                         lastCheckTime = now;
 
-                        // 2) Compute fraction of work done (0 to 1)
-                        double fractionComplete = (double)currentProcessed / totalTriangles;
-                        progress.Report(fractionComplete);
-
-                        // 3) Compute an ETA string (if needed)
-                        string remainingTimeText = "";
-                        if (fractionComplete >= 0.1 && fractionComplete < 1.0 && smoothedThroughput > 0.01)
+                        if(fractionComplete < 1)
                         {
-                            int itemsLeft = totalTriangles - currentProcessed;
-                            double secondsLeft = itemsLeft / smoothedThroughput;
-                            TimeSpan newEta = TimeSpan.FromSeconds(secondsLeft);
-                            // Optionally, assign a formatted string to remainingTimeText.
-                        }
 
-                        // 4) Update title with progress and ETA
-                        invokeOnDispatcher(() => updateTitle($"Baking... {fractionComplete:P0} {remainingTimeText}"));
+                            // 3) Compute an ETA string (if needed)
+                            string remainingTimeText = "";
+                            if (fractionComplete >= 0.1 && fractionComplete < 1.0 && smoothedThroughput > 0.01)
+                            {
+                                int itemsLeft = totalTriangles - currentProcessed;
+                                double secondsLeft = itemsLeft / smoothedThroughput;
+                                TimeSpan newEta = TimeSpan.FromSeconds(secondsLeft);
+                                // Optionally, assign a formatted string to remainingTimeText.
+                            }
+
+                            float progressMultiplier = 1;
+
+                            if(uvPadding > 0)
+                            {
+                                progressMultiplier = 0.5f;
+                            }
+                            
+                            fractionComplete = fractionComplete * progressMultiplier;
+                            progress.Report(fractionComplete);
+                            // 4) Update title with progress and ETA
+                            invokeOnDispatcher(() => updateTitle($"Baking... {fractionComplete:P0} {remainingTimeText}"));
+                        }
 
                         // 5) Provide a preview image to the UI 
                         // Note: All bitmap access is inside the lock.
@@ -436,7 +446,7 @@ namespace NormalSmith.Engine
                         CancellationToken = token,
                         MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 2)
                     },
-                                        triIndex =>
+                    triIndex =>
                     {
                         token.ThrowIfCancellationRequested();
                         Face face = baseMesh.Faces[triIndex];
@@ -646,14 +656,28 @@ namespace NormalSmith.Engine
                     });
                 }
 
-                progress.Report(1.0);
+                progress.Report(1);
                 previewTimer.Dispose();
-                progress.Report(1.0);
+                progress.Report(1);
 
                 // After processing, create the high-resolution bitmap:
                 // After processing, create the final output bitmap(s)
                 if (!dualMode)
                 {
+
+                    void ReportBfsProgress(double localFrac, double start, double chunk)
+                    {
+                        double overall = start + localFrac * chunk;
+                        //progress.Report(overall);
+
+                        // Also update the window title on the UI thread
+                        invokeOnDispatcher(() =>
+                        {
+                            updateTitle($"Island Padding: {overall * 100:0.0}% done");
+                        });
+                    }
+
+                    invokeOnDispatcher(() => updateTitle("Copying from buffer... 50%"));
                     // Single mode: only one map is generated.
                     Bitmap highResBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                     var bmpData = highResBmp.LockBits(
@@ -665,10 +689,61 @@ namespace NormalSmith.Engine
 
                     // Choose the appropriate background color (for example, use the bent map background if generating bent normals).
                     int bgColor = generateBentNormalMap ? unchecked((int)0xFF7A7FFF) : unchecked((int)0xFFB9B9B9);
+                    int[] dilatedIslandMask;
+                    // BFS #1 => go from 90%..95%
+                    if (uvPadding > 0)
+                    {
+                        double start1 = 0.50;
+                        double chunk1 = 0.25;
+                        dilatedIslandMask = DilateIslandMaskBFS(islandBuffer, width, height, uvPadding, token, frac =>
+                        {
+                            // Map local BFS fraction (0..1) => overall progress slice, if you want
+                            // e.g. 90..95%
+                            double overall = 0.50 + frac * 0.25;
+                            progress.Report(overall);
 
-                    int[] dilatedIslandMask = DilateIslandMaskBFS(islandBuffer, width, height, uvPadding);
-                    // Apply island–guided color filling to the final bitmap.
-                    highResBmp = ApplyIslandColorDilationBFS(highResBmp, dilatedIslandMask, width, height, uvPadding, bgColor);
+                            // Update window title on UI thread
+                            invokeOnDispatcher(() =>
+                            {
+                                updateTitle($"Island Padding (Mask)... {overall * 100:0}%");
+                            });
+                        });
+
+                        // BFS #2 => go from 95%..100%
+                        double start2 = 0.75;
+                        double chunk2 = 0.25;
+                        highResBmp = ApplyIslandColorDilationBFS(
+                            highResBmp,
+                            dilatedIslandMask,
+                            width,
+                            height,
+                            uvPadding,
+                            bgColor,
+                            token,
+                            frac =>
+                            {
+                                // e.g. 95..100%
+                                double overall = 0.75 + frac * 0.25;
+                                progress.Report(overall);
+                                invokeOnDispatcher(() => {
+                                    updateTitle($"Island Padding (Map)... {overall * 100:0}%");
+                                });
+                            }
+                        );
+                    }
+                    else
+                    {
+                        // If no padding, BFS doesn't run => just jump to 100%
+                        progress.Report(1.0);
+                    }
+
+                    // At this point, BFS is done => we must be at 100%
+                    progress.Report(1.0);
+
+                    if(supersampleFactor>1)
+                    {
+                        invokeOnDispatcher(() => updateTitle("Downscaling Image..."));
+                    }
 
                     // Downscale the high-res bitmap to the desired output dimensions:
                     Bitmap finalBmp = new Bitmap(texWidth, texHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
@@ -679,6 +754,8 @@ namespace NormalSmith.Engine
                         g.DrawImage(highResBmp, new Rectangle(0, 0, texWidth, texHeight));
                     }
                     highResBmp.Dispose();
+
+                    invokeOnDispatcher(() => updateTitle("Creating Final Bake Images..."));
 
                     // Create the BakeResult and assign the appropriate map based on which flag is true.
                     BakeResult bakeResult = new BakeResult();
@@ -695,8 +772,20 @@ namespace NormalSmith.Engine
                 }
                 else
                 {
-                    // Dual mode: both Bent and Occlusion maps are generated.
+                    void ReportBfsProgress(double localFrac, double start, double chunk)
+                    {
+                        double overall = start + localFrac * chunk;
+                        //progress.Report(overall);
 
+                        // Also update the window title on the UI thread
+                        invokeOnDispatcher(() =>
+                        {
+                            updateTitle($"Island Padding: {overall * 100:0.0}% done");
+                        });
+                    }
+
+                    // Dual mode: both Bent and Occlusion maps are generated.
+                    invokeOnDispatcher(() => updateTitle("Copying from buffer... 50%"));
                     // Create separate high-resolution bitmaps for bent and occlusion maps.
                     Bitmap highResBentBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                     Bitmap highResOccBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
@@ -722,13 +811,80 @@ namespace NormalSmith.Engine
                     // Choose the occlusion background color.
                     int bgColor2 = unchecked((int)0xFFB9B9B9);
 
-                    int[] dilatedIslandMask = DilateIslandMaskBFS(islandBuffer, width, height, uvPadding);
-                    // Apply island–guided color filling to the final bitmap.
-                    highResBentBmp = ApplyIslandColorDilationBFS(highResBentBmp, dilatedIslandMask, width, height, uvPadding, bgColor);
-                    // Apply island–guided color filling to the occlusion bitmap.
-                    highResOccBmp = ApplyIslandColorDilationBFS(highResOccBmp, dilatedIslandMask, width, height, uvPadding, bgColor2);
+                    int[] dilatedIslandMask;
+                    // BFS #1 => go from 90%..95%
+                    if (uvPadding > 0)
+                    {
+                        double start1 = 0.50;
+                        double chunk1 = 0.17;
+                        dilatedIslandMask = DilateIslandMaskBFS(islandBuffer, width, height, uvPadding, token, frac =>
+                        {
+                            // Map local BFS fraction (0..1) => overall progress slice, if you want
+                            // e.g. 90..95%
+                            double overall = 0.50 + frac * 0.17;
+                            progress.Report(overall);
 
-                    invokeOnDispatcher(() => updateTitle("Downscaling Images..."));
+                            // Update window title on UI thread
+                            invokeOnDispatcher(() =>
+                            {
+                                updateTitle($"Island Padding (Mask)... {overall * 100:0}%");
+                            });
+                        });
+
+                        // BFS #2 => go from 95%..100%
+                        double start2 = 0.67;
+                        double chunk2 = 0.16;
+                        highResBentBmp = ApplyIslandColorDilationBFS(
+                            highResBentBmp,
+                            dilatedIslandMask,
+                            width,
+                            height,
+                            uvPadding,
+                            bgColor,
+                            token,
+                            frac =>
+                            {
+                                // e.g. 95..100%
+                                double overall = 0.67 + frac * 0.16;
+                                progress.Report(overall);
+                                invokeOnDispatcher(() => {
+                                    updateTitle($"Island Padding (Bent Map)... {overall * 100:0}%");
+                                });
+                            }
+                        );
+
+                        // BFS #2 => go from 95%..100%
+                        double start3 = 0.83;
+                        double chunk3 = 0.17;
+                        highResOccBmp = ApplyIslandColorDilationBFS(
+                            highResOccBmp,
+                            dilatedIslandMask,
+                            width,
+                            height,
+                            uvPadding,
+                            bgColor2,
+                            token,
+                            frac =>
+                            {
+                                // e.g. 95..100%
+                                double overall = 0.83 + frac * 0.17;
+                                progress.Report(overall);
+                                invokeOnDispatcher(() => {
+                                    updateTitle($"Island Padding (Occ Map) {overall * 100:0}%");
+                                });
+                            }
+                        );
+                    }
+                    else
+                    {
+                        // If no padding, BFS doesn't run => just jump to 100%
+                        progress.Report(1.0);
+                    }
+
+                    if (supersampleFactor > 1)
+                    {
+                        invokeOnDispatcher(() => updateTitle("Downscaling Images..."));
+                    }
 
                     // Downscale the bent bitmap.
                     Bitmap finalBentBmp = new Bitmap(texWidth, texHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
@@ -740,8 +896,6 @@ namespace NormalSmith.Engine
                     }
                     highResBentBmp.Dispose();
 
-                    invokeOnDispatcher(() => updateTitle("Applying Padding if chosen.."));
-
                     // Downscale the occlusion bitmap.
                     Bitmap finalOccBmp = new Bitmap(texWidth, texHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                     using (Graphics g = Graphics.FromImage(finalOccBmp))
@@ -750,6 +904,8 @@ namespace NormalSmith.Engine
                         g.DrawImage(highResOccBmp, new Rectangle(0, 0, texWidth, texHeight));
                     }
                     highResOccBmp.Dispose();
+
+                    invokeOnDispatcher(() => updateTitle("Creating Final Bake Images..."));
 
                     // Create the BakeResult with both maps.
                     BakeResult bakeResult = new BakeResult
@@ -767,6 +923,7 @@ namespace NormalSmith.Engine
         #endregion
 
         #region Helper Methods
+
         private static Bitmap ParallelDownscaleHighQuality(
             Bitmap highResBmp,
             int finalWidth,
@@ -932,53 +1089,122 @@ namespace NormalSmith.Engine
             return padded;
         }
 
-        private static int[] DilateIslandMaskBFS(int[] mask, int width, int height, int uvPadding)
+        //------------------------------------------------------
+        // MODIFIED BFS for Mask-Dilation (Two-Pass)
+        //------------------------------------------------------
+        private static int[] DilateIslandMaskBFS(
+            int[] mask,
+            int width,
+            int height,
+            int uvPadding,
+            CancellationToken token,            // <-- ADDED
+            Action<double> bfsProgress = null   // <-- same callback as before
+        )
         {
             int[] result = (int[])mask.Clone();
 
-            // 1) Initialize a queue with all non-background pixels, distance = 0
-            Queue<(int x, int y, int dist, int islandId)> queue = new Queue<(int, int, int, int)>();
+            // 1) Gather BFS front:
+            Queue<(int x, int y, int dist, int islandId)> initialFront = new();
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
-                    int index = x + y * width;
-                    if (result[index] != -1)
+                    token.ThrowIfCancellationRequested(); // check in any big loop
+
+                    int idx = x + y * width;
+                    if (result[idx] != -1)
                     {
-                        queue.Enqueue((x, y, 0, result[index]));
+                        initialFront.Enqueue((x, y, 0, result[idx]));
                     }
                 }
             }
 
-            // Offsets for neighbors: left, right, up, down
+            if (uvPadding <= 0 || initialFront.Count == 0)
+            {
+                bfsProgress?.Invoke(1.0);
+                return result;
+            }
+
+            // 2) PASS #1: Dry-run BFS to count total fillable
+            long totalToFill = 0;
+            bool[] visited = new bool[width * height];
+            Queue<(int x, int y, int dist, int islandId)> queueForCount = new(initialFront);
+
             int[] offsets = { -1, 1, -width, width };
 
-            // 2) BFS until queue is empty
-            while (queue.Count > 0)
+            while (queueForCount.Count > 0)
             {
-                var (cx, cy, dist, cid) = queue.Dequeue();
+                token.ThrowIfCancellationRequested(); // <-- check each BFS iteration
 
-                // If we haven't reached the padding limit yet, expand neighbors
+                var (cx, cy, dist, cid) = queueForCount.Dequeue();
+
                 if (dist < uvPadding)
                 {
                     foreach (int off in offsets)
                     {
+                        token.ThrowIfCancellationRequested(); // optional check in sub-loop
+
                         int nx = cx, ny = cy;
                         if (off == -1) nx = cx - 1;
                         else if (off == 1) nx = cx + 1;
                         else if (off == -width) ny = cy - 1;
                         else if (off == width) ny = cy + 1;
 
-                        // Check bounds
                         if (nx < 0 || nx >= width || ny < 0 || ny >= height)
                             continue;
 
-                        int neighborIndex = nx + ny * width;
-                        // If neighbor is background, fill it and enqueue
-                        if (result[neighborIndex] == -1)
+                        int nIdx = nx + ny * width;
+                        if (result[nIdx] == -1 && !visited[nIdx])
                         {
-                            result[neighborIndex] = cid;
-                            queue.Enqueue((nx, ny, dist + 1, cid));
+                            visited[nIdx] = true;
+                            totalToFill++;
+                            queueForCount.Enqueue((nx, ny, dist + 1, cid));
+                        }
+                    }
+                }
+            }
+
+            if (totalToFill == 0)
+            {
+                bfsProgress?.Invoke(1.0);
+                return result;
+            }
+
+            // 3) PASS #2: Real BFS that modifies result
+            long filledSoFar = 0;
+            Queue<(int x, int y, int dist, int islandId)> queueForFilling = new(initialFront);
+
+            while (queueForFilling.Count > 0)
+            {
+                token.ThrowIfCancellationRequested(); // <-- crucial!
+
+                var (cx, cy, dist, cid) = queueForFilling.Dequeue();
+
+                if (dist < uvPadding)
+                {
+                    foreach (int off in offsets)
+                    {
+                        token.ThrowIfCancellationRequested();
+
+                        int nx = cx, ny = cy;
+                        if (off == -1) nx = cx - 1;
+                        else if (off == 1) nx = cx + 1;
+                        else if (off == -width) ny = cy - 1;
+                        else if (off == width) ny = cy + 1;
+
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                            continue;
+
+                        int nIdx = nx + ny * width;
+                        if (result[nIdx] == -1)
+                        {
+                            result[nIdx] = cid;
+                            queueForFilling.Enqueue((nx, ny, dist + 1, cid));
+
+                            filledSoFar++;
+                            double frac = (double)filledSoFar / totalToFill;
+                            if (frac > 1.0) frac = 1.0;
+                            bfsProgress?.Invoke(frac);
                         }
                     }
                 }
@@ -987,68 +1213,149 @@ namespace NormalSmith.Engine
             return result;
         }
 
+
+        /// <summary>
+        /// Performs a two-pass BFS-based color dilation on a Bitmap,
+        /// but first computes how many pixels will actually be filled
+        /// (for more accurate progress).
+        /// </summary>
         private static Bitmap ApplyIslandColorDilationBFS(
             Bitmap source,
             int[] islandMask,
             int width,
             int height,
             int uvPadding,
-            int backgroundColor)
+            int backgroundColor,
+            CancellationToken token,            // <--- ADDED
+            Action<double> bfsProgress = null   // <--- same callback
+        )
         {
             Bitmap result = (Bitmap)source.Clone();
 
-            // Build a queue of all non-background pixels with a starting distance of 0.
-            // Each entry: (x, y, dist, islandId, color)
-            Queue<(int x, int y, int dist, int islandId, System.Drawing.Color color)> queue =
-                new Queue<(int, int, int, int, System.Drawing.Color)>();
-
+            // 1) Build the BFS front
+            Queue<(int x, int y, int dist, int islandId, System.Drawing.Color color)> initialFront = new();
             for (int y = 0; y < height; y++)
             {
+                token.ThrowIfCancellationRequested();
+
                 for (int x = 0; x < width; x++)
                 {
+                    token.ThrowIfCancellationRequested();
+
                     int idx = x + y * width;
-                    int islandId = islandMask[idx];
-                    System.Drawing.Color c = result.GetPixel(x, y);
-                    if (c.ToArgb() != backgroundColor && islandId != -1)
-                        queue.Enqueue((x, y, 0, islandId, c));
+                    int cid = islandMask[idx];
+                    var c = result.GetPixel(x, y);
+                    if (cid != -1 && c.ToArgb() != backgroundColor)
+                    {
+                        initialFront.Enqueue((x, y, 0, cid, c));
+                    }
                 }
             }
 
-            // Offsets for 4-neighbor connectivity: left, right, up, down.
-            int[] offsets = new int[] { -1, 1, -width, width };
-
-            while (queue.Count > 0)
+            if (uvPadding <= 0 || initialFront.Count == 0)
             {
-                var (cx, cy, dist, islandId, color) = queue.Dequeue();
+                bfsProgress?.Invoke(1.0);
+                return result;
+            }
 
-                // Only expand if we haven't reached the uvPadding limit.
-                if (dist >= uvPadding)
-                    continue;
+            // 2) PASS #1: Dry-run BFS to count EXACT fillable pixels
+            bool[] visited = new bool[width * height];
+            long totalToFill = 0;
 
-                foreach (int off in offsets)
+            Queue<(int x, int y, int dist, int islandId, System.Drawing.Color color)> queueForCount =
+                new Queue<(int, int, int, int, System.Drawing.Color)>(initialFront);
+
+            int[] offsets = { -1, 1, -width, width };
+
+            while (queueForCount.Count > 0)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var (cx, cy, dist, cid, col) = queueForCount.Dequeue();
+
+                if (dist < uvPadding)
                 {
-                    int nx = cx, ny = cy;
-                    if (off == -1) nx = cx - 1;
-                    else if (off == 1) nx = cx + 1;
-                    else if (off == -width) ny = cy - 1;
-                    else if (off == width) ny = cy + 1;
-
-                    // Check bounds.
-                    if (nx < 0 || nx >= width || ny < 0 || ny >= height)
-                        continue;
-
-                    int nidx = nx + ny * width;
-                    // If neighbor is background and belongs to the same island, fill it.
-                    if (islandMask[nidx] == islandId && result.GetPixel(nx, ny).ToArgb() == backgroundColor)
+                    foreach (int off in offsets)
                     {
-                        result.SetPixel(nx, ny, color);
-                        queue.Enqueue((nx, ny, dist + 1, islandId, color));
+                        token.ThrowIfCancellationRequested();
+
+                        int nx = cx, ny = cy;
+                        if (off == -1) nx = cx - 1;
+                        else if (off == 1) nx = cx + 1;
+                        else if (off == -width) ny = cy - 1;
+                        else if (off == width) ny = cy + 1;
+
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                            continue;
+
+                        int nIdx = nx + ny * width;
+
+                        if (islandMask[nIdx] == cid &&
+                            result.GetPixel(nx, ny).ToArgb() == backgroundColor &&
+                            !visited[nIdx])
+                        {
+                            visited[nIdx] = true;
+                            totalToFill++;
+                            queueForCount.Enqueue((nx, ny, dist + 1, cid, col));
+                        }
+                    }
+                }
+            }
+
+            if (totalToFill == 0)
+            {
+                bfsProgress?.Invoke(1.0);
+                return result;
+            }
+
+            // 3) PASS #2: Actual BFS fill
+            long filledSoFar = 0;
+            Queue<(int x, int y, int dist, int islandId, System.Drawing.Color color)> queueForFilling =
+                new Queue<(int, int, int, int, System.Drawing.Color)>(initialFront);
+
+            while (queueForFilling.Count > 0)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var (cx, cy, dist, cid, col) = queueForFilling.Dequeue();
+
+                if (dist < uvPadding)
+                {
+                    foreach (int off in offsets)
+                    {
+                        token.ThrowIfCancellationRequested();
+
+                        int nx = cx, ny = cy;
+                        if (off == -1) nx = cx - 1;
+                        else if (off == 1) nx = cx + 1;
+                        else if (off == -width) ny = cy - 1;
+                        else if (off == width) ny = cy + 1;
+
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                            continue;
+
+                        int nIdx = nx + ny * width;
+                        // Actually fill background pixels
+                        if (islandMask[nIdx] == cid &&
+                            result.GetPixel(nx, ny).ToArgb() == backgroundColor)
+                        {
+                            result.SetPixel(nx, ny, col);
+                            queueForFilling.Enqueue((nx, ny, dist + 1, cid, col));
+
+                            filledSoFar++;
+                            double frac = (double)filledSoFar / totalToFill;
+                            if (frac > 1.0) frac = 1.0;
+                            bfsProgress?.Invoke(frac);
+                        }
                     }
                 }
             }
 
             return result;
         }
+
+
+
 
         /// <summary>
         /// Computes a UV island ID for each triangle using the given UV channel.

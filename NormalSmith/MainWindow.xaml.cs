@@ -791,7 +791,7 @@ namespace NormalSmith
             {
                 var progress = new Progress<double>(p =>
                 {
-                    this.Title = $"Baking... {p:P0}";
+                    //this.Title = $"Baking... {p:P0}";
                     taskbarInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.Normal;
                     taskbarInfo.ProgressValue = p;
                 });
