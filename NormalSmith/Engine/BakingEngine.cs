@@ -17,6 +17,7 @@ using NumericsMatrix = System.Numerics.Matrix4x4;
 using NormalSmith.DataStructure;
 using NormalSmith.HelperFunctions;
 using System.Windows.Forms;
+using System.Windows.Media;
 
 namespace NormalSmith.Engine
 {
@@ -299,109 +300,133 @@ namespace NormalSmith.Engine
                 DateTime lastCheckTime = startTime;
                 // How many triangles we had processed at the last check.
                 int lastProcessedTriangles = 0;
+
+                // Pre-allocate the preview bitmap once.
+                Bitmap previewBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                // At the beginning of the Task.Run delegate, declare a lock object:
+                object previewBmpLock = new object();
+
                 // Start a timer to periodically update the UI and compute ETA.
                 var previewTimer = new System.Threading.Timer(_ =>
                 {
-                    // 1) Measure how many triangles were processed since last time
-                    DateTime now = DateTime.UtcNow;
-                    TimeSpan interval = now - lastCheckTime;
-
-                    // The total number of triangles processed so far:
-                    int currentProcessed = Interlocked.CompareExchange(ref processedTriangles, 0, 0);
-
-                    // Triangles processed *this* interval
-                    int processedThisInterval = currentProcessed - lastProcessedTriangles;
-
-                    // Update smoothed throughput (items/sec)
-                    if (processedThisInterval > 0 && interval.TotalSeconds > 0)
+                    // Wrap the entire timer callback in a lock to prevent overlapping accesses.
+                    lock (previewBmpLock)
                     {
-                        double rawThroughput = processedThisInterval / interval.TotalSeconds;
+                        // 1) Measure how many triangles were processed since last time
+                        DateTime now = DateTime.UtcNow;
+                        TimeSpan interval = now - lastCheckTime;
 
-                        if (smoothedThroughput < 1e-6)
+                        // The total number of triangles processed so far:
+                        int currentProcessed = Interlocked.CompareExchange(ref processedTriangles, 0, 0);
+                        // Triangles processed *this* interval:
+                        int processedThisInterval = currentProcessed - lastProcessedTriangles;
+
+                        // Update smoothed throughput (items/sec)
+                        if (processedThisInterval > 0 && interval.TotalSeconds > 0)
                         {
-                            // First measurement
-                            smoothedThroughput = rawThroughput;
+                            double rawThroughput = processedThisInterval / interval.TotalSeconds;
+                            if (smoothedThroughput < 1e-6)
+                            {
+                                // First measurement
+                                smoothedThroughput = rawThroughput;
+                            }
+                            else
+                            {
+                                // Exponential smoothing
+                                smoothedThroughput = smoothingFactor * smoothedThroughput + (1.0 - smoothingFactor) * rawThroughput;
+                            }
                         }
-                        else
+
+                        // Update "last check" for the next callback
+                        lastProcessedTriangles = currentProcessed;
+                        lastCheckTime = now;
+
+                        // 2) Compute fraction of work done (0 to 1)
+                        double fractionComplete = (double)currentProcessed / totalTriangles;
+                        progress.Report(fractionComplete);
+
+                        // 3) Compute an ETA string (if needed)
+                        string remainingTimeText = "";
+                        if (fractionComplete >= 0.1 && fractionComplete < 1.0 && smoothedThroughput > 0.01)
                         {
-                            // Exponential smoothing
-                            smoothedThroughput = smoothingFactor * smoothedThroughput
-                                                 + (1.0 - smoothingFactor) * rawThroughput;
+                            int itemsLeft = totalTriangles - currentProcessed;
+                            double secondsLeft = itemsLeft / smoothedThroughput;
+                            TimeSpan newEta = TimeSpan.FromSeconds(secondsLeft);
+                            // Optionally, assign a formatted string to remainingTimeText.
                         }
-                    }
 
-                    // Update "last check" for the next callback
-                    lastProcessedTriangles = currentProcessed;
-                    lastCheckTime = now;
+                        // 4) Update title with progress and ETA
+                        invokeOnDispatcher(() => updateTitle($"Baking... {fractionComplete:P0} {remainingTimeText}"));
 
-                    // 2) Compute fraction of work done (0 to 1)
-                    double fractionComplete = (double)currentProcessed / totalTriangles;
-                    progress.Report(fractionComplete);
-
-                    // 3) Compute an ETA string
-                    string remainingTimeText = "";
-
-                    // Only show an ETA if:
-                    //    - we've made at least 10% progress,
-                    //    - we haven't finished yet, and
-                    //    - we have a non-trivial throughput measurement
-                    if (fractionComplete >= 0.1 && fractionComplete < 1.0 && smoothedThroughput > 0.01)
-                    {
-                        int itemsLeft = totalTriangles - currentProcessed;
-                        double secondsLeft = itemsLeft / smoothedThroughput;
-                        TimeSpan newEta = TimeSpan.FromSeconds(secondsLeft);
-                        //remainingTimeText = newEta.ToString(@"hh\:mm\:s");
-                    }
-                    else if (fractionComplete >= 1.0)
-                    {
-                        // If we are effectively done
-                        //remainingTimeText = "00:00:00";
-                    }
-
-                    // 4) Update title with progress and ETA
-                    invokeOnDispatcher(() => updateTitle(
-                        $"Baking... {fractionComplete:P0} {remainingTimeText}"
-                    ));
-
-                    // 5) Provide a preview image to the UI 
-                    //    (Same logic you had before; simplified to show the gist.)
-
-                    if (!dualMode)
-                    {
-                        // Single-buffer preview
-                        using (var previewBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb))
+                        // 5) Provide a preview image to the UI 
+                        // Note: All bitmap access is inside the lock.
+                        // Single-mode: update preview bitmap using unsafe code for memory copy.
+                        if (!dualMode)
                         {
+                            // Lock the preview bitmap.
                             var bmpData = previewBmp.LockBits(
                                 new Rectangle(0, 0, width, height),
                                 ImageLockMode.WriteOnly,
                                 previewBmp.PixelFormat);
-                            Marshal.Copy(singleBuffer, 0, bmpData.Scan0, singleBuffer.Length);
+
+                            unsafe
+                            {
+                                // Pin the managed buffer.
+                                fixed (int* src = singleBuffer)
+                                {
+                                    // Copy the entire buffer in one go.
+                                    Buffer.MemoryCopy(
+                                        src,
+                                        bmpData.Scan0.ToPointer(),
+                                        singleBuffer.Length * sizeof(int),  // destination size in bytes
+                                        singleBuffer.Length * sizeof(int)); // number of bytes to copy
+                                }
+                            }
+
                             previewBmp.UnlockBits(bmpData);
 
-                            // Marshal back to UI thread to show the image
-                            invokeOnDispatcher(() => updatePreview(previewBmp));
+                            // Downscale the high resolution previewBmp using the nearest neighbor algorithm
+                            Bitmap downscaledPreview = NearestNeighborDownscale(previewBmp, 1024, 1024);
+
+                            // Dispatch the updated bitmap to the UI.
+                            invokeOnDispatcher(() => updatePreview(downscaledPreview));
                         }
-                    }
-                    else
-                    {
-                        // Dual-mode: show bent buffer as preview
-                        using (var bentPreview = new Bitmap(width, height, PixelFormat.Format32bppArgb))
+                        else
                         {
-                            var bentData = bentPreview.LockBits(
+                            // Dual-mode: update preview using the bentBuffer.
+                            var bmpData = previewBmp.LockBits(
                                 new Rectangle(0, 0, width, height),
                                 ImageLockMode.WriteOnly,
-                                bentPreview.PixelFormat);
-                            Marshal.Copy(bentBuffer, 0, bentData.Scan0, bentBuffer.Length);
-                            bentPreview.UnlockBits(bentData);
+                                previewBmp.PixelFormat);
 
-                            invokeOnDispatcher(() => updatePreview(bentPreview));
+                            unsafe
+                            {
+                                fixed (int* src = bentBuffer)
+                                {
+                                    Buffer.MemoryCopy(
+                                        src,
+                                        bmpData.Scan0.ToPointer(),
+                                        bentBuffer.Length * sizeof(int),
+                                        bentBuffer.Length * sizeof(int));
+                                }
+                            }
+
+                            previewBmp.UnlockBits(bmpData);
+
+                            // Downscale the high resolution previewBmp using the nearest neighbor algorithm
+                            Bitmap downscaledPreview = NearestNeighborDownscale(previewBmp, 1024, 1024);
+
+                            // Dispatch the downscaled preview to the UI.
+                            invokeOnDispatcher(() => updatePreview(downscaledPreview));
+
                         }
-                    }
+
+                    } // End of lock (previewBmpLock)
                 },
                 null,
-                previewInterval,  // e.g., 500 ms or 1000 ms
-                previewInterval);
-
+                previewInterval,  // due time
+                previewInterval   // period
+                );
 
                 try
                 {
@@ -630,7 +655,7 @@ namespace NormalSmith.Engine
                 if (!dualMode)
                 {
                     // Single mode: only one map is generated.
-                    Bitmap highResBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+                    Bitmap highResBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                     var bmpData = highResBmp.LockBits(
                         new Rectangle(0, 0, width, height),
                         ImageLockMode.WriteOnly,
@@ -638,8 +663,15 @@ namespace NormalSmith.Engine
                     Marshal.Copy(singleBuffer, 0, bmpData.Scan0, singleBuffer.Length);
                     highResBmp.UnlockBits(bmpData);
 
+                    // Choose the appropriate background color (for example, use the bent map background if generating bent normals).
+                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF7A7FFF) : unchecked((int)0xFFB9B9B9);
+
+                    int[] dilatedIslandMask = DilateIslandMaskBFS(islandBuffer, width, height, uvPadding);
+                    // Apply island–guided color filling to the final bitmap.
+                    highResBmp = ApplyIslandColorDilationBFS(highResBmp, dilatedIslandMask, width, height, uvPadding, bgColor);
+
                     // Downscale the high-res bitmap to the desired output dimensions:
-                    Bitmap finalBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
+                    Bitmap finalBmp = new Bitmap(texWidth, texHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
                     using (Graphics g = Graphics.FromImage(finalBmp))
                     {
@@ -647,16 +679,6 @@ namespace NormalSmith.Engine
                         g.DrawImage(highResBmp, new Rectangle(0, 0, texWidth, texHeight));
                     }
                     highResBmp.Dispose();
-
-                    // Downscale and process the island mask.
-                    int[] finalIslandMask = DownscaleIslandMask(islandBuffer, width, height, texWidth, texHeight);
-                    int[] dilatedIslandMask = DilateIslandMaskBFS(finalIslandMask, texWidth, texHeight, uvPadding);
-
-                    // Choose the appropriate background color (for example, use the bent map background if generating bent normals).
-                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF7A7FFF) : unchecked((int)0xFFB9B9B9);
-
-                    // Apply island–guided color filling to the final bitmap.
-                    finalBmp = ApplyIslandColorDilationBFS(finalBmp, dilatedIslandMask, texWidth, texHeight, uvPadding, bgColor);
 
                     // Create the BakeResult and assign the appropriate map based on which flag is true.
                     BakeResult bakeResult = new BakeResult();
@@ -676,8 +698,8 @@ namespace NormalSmith.Engine
                     // Dual mode: both Bent and Occlusion maps are generated.
 
                     // Create separate high-resolution bitmaps for bent and occlusion maps.
-                    Bitmap highResBentBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-                    Bitmap highResOccBmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+                    Bitmap highResBentBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                    Bitmap highResOccBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
                     // Copy the bentBuffer into its bitmap.
                     var bentData = highResBentBmp.LockBits(
@@ -695,8 +717,21 @@ namespace NormalSmith.Engine
                     Marshal.Copy(occBuffer, 0, occData.Scan0, occBuffer.Length);
                     highResOccBmp.UnlockBits(occData);
 
+                    // Choose the appropriate background color (for example, use the bent map background if generating bent normals).
+                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF7A7FFF) : unchecked((int)0xFFB9B9B9);
+                    // Choose the occlusion background color.
+                    int bgColor2 = unchecked((int)0xFFB9B9B9);
+
+                    int[] dilatedIslandMask = DilateIslandMaskBFS(islandBuffer, width, height, uvPadding);
+                    // Apply island–guided color filling to the final bitmap.
+                    highResBentBmp = ApplyIslandColorDilationBFS(highResBentBmp, dilatedIslandMask, width, height, uvPadding, bgColor);
+                    // Apply island–guided color filling to the occlusion bitmap.
+                    highResOccBmp = ApplyIslandColorDilationBFS(highResOccBmp, dilatedIslandMask, width, height, uvPadding, bgColor2);
+
+                    invokeOnDispatcher(() => updateTitle("Downscaling Images..."));
+
                     // Downscale the bent bitmap.
-                    Bitmap finalBentBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
+                    Bitmap finalBentBmp = new Bitmap(texWidth, texHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
                     using (Graphics g = Graphics.FromImage(finalBentBmp))
                     {
@@ -705,34 +740,16 @@ namespace NormalSmith.Engine
                     }
                     highResBentBmp.Dispose();
 
-                    // Downscale and process the island mask.
-                    int[] finalIslandMask = DownscaleIslandMask(islandBuffer, width, height, texWidth, texHeight);
-                    int[] dilatedIslandMask = DilateIslandMaskBFS(finalIslandMask, texWidth, texHeight, uvPadding);
-
-                    // Choose the appropriate background color (for example, use the bent map background if generating bent normals).
-                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF7A7FFF) : unchecked((int)0xFFB9B9B9);
-
-                    // Apply island–guided color filling to the final bitmap.
-                    finalBentBmp = ApplyIslandColorDilationBFS(finalBentBmp, dilatedIslandMask, texWidth, texHeight, uvPadding, bgColor);
+                    invokeOnDispatcher(() => updateTitle("Applying Padding if chosen.."));
 
                     // Downscale the occlusion bitmap.
-                    Bitmap finalOccBmp = new Bitmap(texWidth, texHeight, PixelFormat.Format32bppArgb);
+                    Bitmap finalOccBmp = new Bitmap(texWidth, texHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                     using (Graphics g = Graphics.FromImage(finalOccBmp))
                     {
                         g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
                         g.DrawImage(highResOccBmp, new Rectangle(0, 0, texWidth, texHeight));
                     }
                     highResOccBmp.Dispose();
-
-                    // Downscale and process the island mask for the occlusion map.
-                    int[] finalIslandMask2 = DownscaleIslandMask(islandBuffer, width, height, texWidth, texHeight);
-                    int[] dilatedIslandMask2 = DilateIslandMaskBFS(finalIslandMask2, texWidth, texHeight, uvPadding);
-
-                    // Choose the occlusion background color.
-                    int bgColor2 = unchecked((int)0xFFB9B9B9);
-
-                    // Apply island–guided color filling to the occlusion bitmap.
-                    finalOccBmp = ApplyIslandColorDilationBFS(finalOccBmp, dilatedIslandMask2, texWidth, texHeight, uvPadding, bgColor2);
 
                     // Create the BakeResult with both maps.
                     BakeResult bakeResult = new BakeResult
@@ -750,6 +767,129 @@ namespace NormalSmith.Engine
         #endregion
 
         #region Helper Methods
+        private static Bitmap ParallelDownscaleHighQuality(
+            Bitmap highResBmp,
+            int finalWidth,
+            int finalHeight,
+            IProgress<double> progress,
+            CancellationToken token)
+        {
+            // Create the final output bitmap.
+            Bitmap finalBmp = new Bitmap(finalWidth, finalHeight, highResBmp.PixelFormat);
+
+            // For simplicity, we split the image vertically into a number of sections.
+            // You can adjust numSections based on processor count or a fixed value.
+            int numSections = 4;  // For example, split into 4 vertical sections.
+            int sectionWidth = finalWidth / numSections;
+
+            // Determine scale factors from the high-res image to the final image.
+            double scaleX = (double)highResBmp.Width / finalWidth;
+            double scaleY = (double)highResBmp.Height / finalHeight;
+
+            // Lock object to protect finalBmp while merging sections.
+            object finalBmpLock = new object();
+
+            // Create tasks for each section.
+            List<Task> tasks = new List<Task>();
+            for (int i = 0; i < numSections; i++)
+            {
+                // Calculate the destination rectangle for this section.
+                int destX = i * sectionWidth;
+                int destWidth = (i == numSections - 1) ? (finalWidth - destX) : sectionWidth;
+                Rectangle destRect = new Rectangle(destX, 0, destWidth, finalHeight);
+
+                // Calculate the corresponding source rectangle.
+                // We assume a uniform scale in X and Y.
+                Rectangle sourceRect = new Rectangle(
+                    (int)(destRect.X * scaleX),
+                    0,
+                    (int)(destRect.Width * scaleX),
+                    highResBmp.Height);  // Using the full height of the high-res image
+
+                // Create a task for processing this section.
+                tasks.Add(Task.Run(() =>
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    // Create a temporary bitmap for this section.
+                    using (Bitmap sectionBmp = new Bitmap(destRect.Width, destRect.Height, highResBmp.PixelFormat))
+                    {
+                        // Use Graphics to perform high-quality bicubic downscaling on this section.
+                        using (Graphics g = Graphics.FromImage(sectionBmp))
+                        {
+                            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            g.DrawImage(highResBmp, new Rectangle(0, 0, destRect.Width, destRect.Height), sourceRect, GraphicsUnit.Pixel);
+                        }
+
+                        // Copy the downscaled section into the final bitmap.
+                        lock (finalBmpLock)
+                        {
+                            using (Graphics gFinal = Graphics.FromImage(finalBmp))
+                            {
+                                gFinal.DrawImage(sectionBmp, destRect);
+                            }
+                        }
+                    }
+                    // Report progress for this section.
+                    progress?.Report((double)(i + 1) / numSections);
+                }, token));
+            }
+
+            // Wait for all sections to finish.
+            Task.WaitAll(tasks.ToArray());
+
+            return finalBmp;
+        }
+
+        private static Bitmap NearestNeighborDownscale(Bitmap source, int newWidth, int newHeight)
+        {
+            // Create the destination bitmap with the target dimensions.
+            Bitmap dest = new Bitmap(newWidth, newHeight, source.PixelFormat);
+
+            // Lock both source and destination bitmaps for efficient memory access.
+            var sourceData = source.LockBits(new Rectangle(0, 0, source.Width, source.Height),
+                                             ImageLockMode.ReadOnly, source.PixelFormat);
+            var destData = dest.LockBits(new Rectangle(0, 0, newWidth, newHeight),
+                                         ImageLockMode.WriteOnly, source.PixelFormat);
+
+            int bytesPerPixel = Image.GetPixelFormatSize(source.PixelFormat) / 8;
+
+            unsafe
+            {
+                byte* srcPtr = (byte*)sourceData.Scan0;
+                byte* destPtr = (byte*)destData.Scan0;
+
+                // For each destination pixel, map to the corresponding source pixel.
+                for (int y = 0; y < newHeight; y++)
+                {
+                    // Compute source y-coordinate via nearest neighbor.
+                    int srcY = y * source.Height / newHeight;
+
+                    for (int x = 0; x < newWidth; x++)
+                    {
+                        // Compute source x-coordinate via nearest neighbor.
+                        int srcX = x * source.Width / newWidth;
+
+                        // Get pointers to the source and destination pixels.
+                        byte* srcPixel = srcPtr + (srcY * sourceData.Stride) + (srcX * bytesPerPixel);
+                        byte* destPixel = destPtr + (y * destData.Stride) + (x * bytesPerPixel);
+
+                        // Copy the pixel data (for each channel).
+                        for (int i = 0; i < bytesPerPixel; i++)
+                        {
+                            destPixel[i] = srcPixel[i];
+                        }
+                    }
+                }
+            }
+
+            // Unlock the bitmaps.
+            source.UnlockBits(sourceData);
+            dest.UnlockBits(destData);
+
+            return dest;
+        }
+
 
         private static Bitmap ApplyUvPadding(Bitmap source, int padding)
         {
@@ -765,15 +905,15 @@ namespace NormalSmith.Engine
                 {
                     for (int y = 1; y < height - 1; y++)
                     {
-                        Color current = padded.GetPixel(x, y);
+                        System.Drawing.Color current = padded.GetPixel(x, y);
                         // Assume the background is pure black (0xFF000000). Adjust if necessary.
                         if (current.ToArgb() == unchecked((int)0xFF000000))
                         {
                             // Check neighboring pixels.
-                            Color left = padded.GetPixel(x - 1, y);
-                            Color right = padded.GetPixel(x + 1, y);
-                            Color up = padded.GetPixel(x, y - 1);
-                            Color down = padded.GetPixel(x, y + 1);
+                            System.Drawing.Color left = padded.GetPixel(x - 1, y);
+                            System.Drawing.Color right = padded.GetPixel(x + 1, y);
+                            System.Drawing.Color up = padded.GetPixel(x, y - 1);
+                            System.Drawing.Color down = padded.GetPixel(x, y + 1);
                             // If any neighbor is non-background, set this pixel to that color.
                             if (left.ToArgb() != unchecked((int)0xFF000000))
                                 temp.SetPixel(x, y, left);
@@ -790,21 +930,6 @@ namespace NormalSmith.Engine
                 padded = temp;
             }
             return padded;
-        }
-
-        private static int[] DownscaleIslandMask(int[] highResMask, int highWidth, int highHeight, int finalWidth, int finalHeight)
-        {
-            int[] finalMask = new int[finalWidth * finalHeight];
-            for (int y = 0; y < finalHeight; y++)
-            {
-                for (int x = 0; x < finalWidth; x++)
-                {
-                    int srcX = (int)(x / (float)finalWidth * highWidth);
-                    int srcY = (int)(y / (float)finalHeight * highHeight);
-                    finalMask[x + y * finalWidth] = highResMask[srcX + srcY * highWidth];
-                }
-            }
-            return finalMask;
         }
 
         private static int[] DilateIslandMaskBFS(int[] mask, int width, int height, int uvPadding)
@@ -874,8 +999,8 @@ namespace NormalSmith.Engine
 
             // Build a queue of all non-background pixels with a starting distance of 0.
             // Each entry: (x, y, dist, islandId, color)
-            Queue<(int x, int y, int dist, int islandId, Color color)> queue =
-                new Queue<(int, int, int, int, Color)>();
+            Queue<(int x, int y, int dist, int islandId, System.Drawing.Color color)> queue =
+                new Queue<(int, int, int, int, System.Drawing.Color)>();
 
             for (int y = 0; y < height; y++)
             {
@@ -883,7 +1008,7 @@ namespace NormalSmith.Engine
                 {
                     int idx = x + y * width;
                     int islandId = islandMask[idx];
-                    Color c = result.GetPixel(x, y);
+                    System.Drawing.Color c = result.GetPixel(x, y);
                     if (c.ToArgb() != backgroundColor && islandId != -1)
                         queue.Enqueue((x, y, 0, islandId, c));
                 }
