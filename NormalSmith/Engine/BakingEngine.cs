@@ -159,15 +159,11 @@ namespace NormalSmith.Engine
 
 
                 // Ensure there is at least one mesh in the scene.
-                if (scene != null)
-                {
-                    if (scene.MeshCount == 0 || scene == null)
-                        throw new Exception("No mesh found in file.");
-                }
-                else
-                {
+                if (scene == null)
                     throw new Exception("No mesh file loaded.");
-                }
+                if (scene.MeshCount == 0)
+                    throw new Exception("No mesh found in file.");
+
 
                 // Retrieve the chosen mesh.
                 var baseMesh = scene.Meshes[selectedMeshIndex];
@@ -695,7 +691,7 @@ namespace NormalSmith.Engine
                     {
                         double start1 = 0.50;
                         double chunk1 = 0.25;
-                        dilatedIslandMask = DilateIslandMaskBFS(islandBuffer, width, height, uvPadding, token, frac =>
+                        dilatedIslandMask = DilateIslandMask(islandBuffer, width, height, uvPadding, token, frac =>
                         {
                             // Map local BFS fraction (0..1) => overall progress slice, if you want
                             // e.g. 90..95%
@@ -712,7 +708,7 @@ namespace NormalSmith.Engine
                         // BFS #2 => go from 95%..100%
                         double start2 = 0.75;
                         double chunk2 = 0.25;
-                        highResBmp = ApplyIslandColorDilationBFS(
+                        highResBmp = ApplyIslandColorDilation(
                             highResBmp,
                             dilatedIslandMask,
                             width,
@@ -817,7 +813,7 @@ namespace NormalSmith.Engine
                     {
                         double start1 = 0.50;
                         double chunk1 = 0.17;
-                        dilatedIslandMask = DilateIslandMaskBFS(islandBuffer, width, height, uvPadding, token, frac =>
+                        dilatedIslandMask = DilateIslandMask(islandBuffer, width, height, uvPadding, token, frac =>
                         {
                             // Map local BFS fraction (0..1) => overall progress slice, if you want
                             // e.g. 90..95%
@@ -834,7 +830,7 @@ namespace NormalSmith.Engine
                         // BFS #2 => go from 95%..100%
                         double start2 = 0.67;
                         double chunk2 = 0.16;
-                        highResBentBmp = ApplyIslandColorDilationBFS(
+                        highResBentBmp = ApplyIslandColorDilation(
                             highResBentBmp,
                             dilatedIslandMask,
                             width,
@@ -856,7 +852,7 @@ namespace NormalSmith.Engine
                         // BFS #2 => go from 95%..100%
                         double start3 = 0.83;
                         double chunk3 = 0.17;
-                        highResOccBmp = ApplyIslandColorDilationBFS(
+                        highResOccBmp = ApplyIslandColorDilation(
                             highResOccBmp,
                             dilatedIslandMask,
                             width,
@@ -1089,279 +1085,256 @@ namespace NormalSmith.Engine
             return padded;
         }
 
-        //------------------------------------------------------
-        // MODIFIED BFS for Mask-Dilation (Two-Pass)
-        //------------------------------------------------------
-        private static int[] DilateIslandMaskBFS(
+        /// <summary>
+        /// Expands each island ID in the given 'mask' array by 'uvPadding' pixels.
+        /// Morphologically dilates any pixel whose mask ID is >= 0, so that any background pixel (-1)
+        /// that touches an island becomes that island's ID. This is a replacement for the BFS mask-expansion.
+        /// </summary>
+        /// <param name="mask">An integer array of length width*height, where -1=background, or an integer island ID.</param>
+        /// <param name="width">Image width.</param>
+        /// <param name="height">Image height.</param>
+        /// <param name="uvPadding">Distance (in pixels) to expand island IDs outward.</param>
+        /// <param name="token">Cancellation token for aborting.</param>
+        /// <param name="bfsProgress">Optional callback for progress, from 0..1.</param>
+        /// <returns>An expanded integer array, same size, with islands grown outward by 'uvPadding' pixels.</returns>
+        private static int[] DilateIslandMask(
             int[] mask,
             int width,
             int height,
             int uvPadding,
-            CancellationToken token,            // <-- ADDED
-            Action<double> bfsProgress = null   // <-- same callback as before
+            CancellationToken token,
+            Action<double> bfsProgress = null
         )
         {
+            // 1) If no padding, just return a copy (no changes).
+            if (uvPadding <= 0)
+            {
+                bfsProgress?.Invoke(1.0);
+                return (int[])mask.Clone();
+            }
+
+            // We'll do 'uvPadding' passes; each pass grows the mask out by 1 pixel in all directions.
             int[] result = (int[])mask.Clone();
 
-            // 1) Gather BFS front:
-            Queue<(int x, int y, int dist, int islandId)> initialFront = new();
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    token.ThrowIfCancellationRequested(); // check in any big loop
-
-                    int idx = x + y * width;
-                    if (result[idx] != -1)
-                    {
-                        initialFront.Enqueue((x, y, 0, result[idx]));
-                    }
-                }
-            }
-
-            if (uvPadding <= 0 || initialFront.Count == 0)
-            {
-                bfsProgress?.Invoke(1.0);
-                return result;
-            }
-
-            // 2) PASS #1: Dry-run BFS to count total fillable
-            long totalToFill = 0;
-            bool[] visited = new bool[width * height];
-            Queue<(int x, int y, int dist, int islandId)> queueForCount = new(initialFront);
-
+            // We only do 4-neighbor expansions here, to match your BFS code's up/down/left/right logic.
+            // If you'd like 8 neighbors, just add the diagonals.
             int[] offsets = { -1, 1, -width, width };
 
-            while (queueForCount.Count > 0)
+            // 2) Morphologically expand in layers.
+            for (int iteration = 1; iteration <= uvPadding; iteration++)
             {
-                token.ThrowIfCancellationRequested(); // <-- check each BFS iteration
+                token.ThrowIfCancellationRequested();
 
-                var (cx, cy, dist, cid) = queueForCount.Dequeue();
+                // We'll create a new array for the next "layer" so we don't partially overwrite ourselves.
+                int[] nextMask = (int[])result.Clone();
 
-                if (dist < uvPadding)
+                // For each pixel that is currently -1, see if any neighbor has a valid island ID.
+                for (int y = 0; y < height; y++)
                 {
-                    foreach (int off in offsets)
-                    {
-                        token.ThrowIfCancellationRequested(); // optional check in sub-loop
-
-                        int nx = cx, ny = cy;
-                        if (off == -1) nx = cx - 1;
-                        else if (off == 1) nx = cx + 1;
-                        else if (off == -width) ny = cy - 1;
-                        else if (off == width) ny = cy + 1;
-
-                        if (nx < 0 || nx >= width || ny < 0 || ny >= height)
-                            continue;
-
-                        int nIdx = nx + ny * width;
-                        if (result[nIdx] == -1 && !visited[nIdx])
-                        {
-                            visited[nIdx] = true;
-                            totalToFill++;
-                            queueForCount.Enqueue((nx, ny, dist + 1, cid));
-                        }
-                    }
-                }
-            }
-
-            if (totalToFill == 0)
-            {
-                bfsProgress?.Invoke(1.0);
-                return result;
-            }
-
-            // 3) PASS #2: Real BFS that modifies result
-            long filledSoFar = 0;
-            Queue<(int x, int y, int dist, int islandId)> queueForFilling = new(initialFront);
-
-            while (queueForFilling.Count > 0)
-            {
-                token.ThrowIfCancellationRequested(); // <-- crucial!
-
-                var (cx, cy, dist, cid) = queueForFilling.Dequeue();
-
-                if (dist < uvPadding)
-                {
-                    foreach (int off in offsets)
+                    for (int x = 0; x < width; x++)
                     {
                         token.ThrowIfCancellationRequested();
 
-                        int nx = cx, ny = cy;
-                        if (off == -1) nx = cx - 1;
-                        else if (off == 1) nx = cx + 1;
-                        else if (off == -width) ny = cy - 1;
-                        else if (off == width) ny = cy + 1;
-
-                        if (nx < 0 || nx >= width || ny < 0 || ny >= height)
-                            continue;
-
-                        int nIdx = nx + ny * width;
-                        if (result[nIdx] == -1)
+                        int idx = x + y * width;
+                        if (result[idx] == -1) // background
                         {
-                            result[nIdx] = cid;
-                            queueForFilling.Enqueue((nx, ny, dist + 1, cid));
+                            // Check neighbors
+                            foreach (int off in offsets)
+                            {
+                                int nx = x, ny = y;
+                                if (off == -1) nx = x - 1;
+                                else if (off == 1) nx = x + 1;
+                                else if (off == -width) ny = y - 1;
+                                else if (off == width) ny = y + 1;
 
-                            filledSoFar++;
-                            double frac = (double)filledSoFar / totalToFill;
-                            if (frac > 1.0) frac = 1.0;
-                            bfsProgress?.Invoke(frac);
+                                // Bounds check
+                                if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                                    continue;
+
+                                int nIdx = nx + ny * width;
+                                int neighborIslandId = result[nIdx];
+
+                                // If neighbor has a valid island, adopt it
+                                if (neighborIslandId != -1)
+                                {
+                                    nextMask[idx] = neighborIslandId;
+                                    break;  // We found an island neighbor, so we can stop checking
+                                }
+                            }
                         }
                     }
                 }
+
+                // Copy the newly expanded mask for the next iteration
+                result = nextMask;
+
+                // (Optional) Provide iteration-based progress
+                double frac = (double)iteration / uvPadding;
+                if (frac > 1.0) frac = 1.0;
+                bfsProgress?.Invoke(frac);
             }
 
+            // 3) Return the final grown mask
+            bfsProgress?.Invoke(1.0);
             return result;
         }
 
-
         /// <summary>
-        /// Performs a two-pass BFS-based color dilation on a Bitmap,
-        /// but first computes how many pixels will actually be filled
-        /// (for more accurate progress).
+        /// Morphologically dilates each UV island by 'uvPadding' pixels, 
+        /// filling the background color around each island with the island's color.
+        /// This replaces the BFS-based color dilation, but yields the same final result
+        /// in a simpler and often faster way.
         /// </summary>
-        private static Bitmap ApplyIslandColorDilationBFS(
+        /// <param name="source">The source bitmap (ARGB).</param>
+        /// <param name="islandMask">
+        /// An array of length (width*height) that gives the island ID for each pixel, or -1 for background.
+        /// </param>
+        /// <param name="width">Bitmap width.</param>
+        /// <param name="height">Bitmap height.</param>
+        /// <param name="uvPadding">Distance in pixels to expand around the island.</param>
+        /// <param name="backgroundColor">ARGB integer indicating background color (e.g. 0xFF000000).</param>
+        /// <param name="token">Cancellation token to allow user to abort.</param>
+        /// <param name="bfsProgress">
+        /// Optional progress callback, reporting fraction from 0..1 across all iterations.
+        /// </param>
+        /// <returns>
+        /// A new Bitmap in which each island’s color has been expanded by `uvPadding` pixels 
+        /// into the background.
+        /// </returns>
+        private static Bitmap ApplyIslandColorDilation(
             Bitmap source,
             int[] islandMask,
             int width,
             int height,
             int uvPadding,
             int backgroundColor,
-            CancellationToken token,            // <--- ADDED
-            Action<double> bfsProgress = null   // <--- same callback
+            CancellationToken token,
+            Action<double> bfsProgress = null
         )
         {
+            // 1) If no padding, just return a clone
+            if (uvPadding <= 0)
+            {
+                bfsProgress?.Invoke(1.0);
+                return (Bitmap)source.Clone();
+            }
+
+            // 2) Clone and lock the bitmap
             Bitmap result = (Bitmap)source.Clone();
+            var rect = new Rectangle(0, 0, width, height);
+            var data = result.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadWrite, result.PixelFormat);
 
-            // 1) Build the BFS front
-            Queue<(int x, int y, int dist, int islandId, System.Drawing.Color color)> initialFront = new();
-            for (int y = 0; y < height; y++)
+            int[] pixelData = new int[width * height];
+            System.Runtime.InteropServices.Marshal.Copy(data.Scan0, pixelData, 0, pixelData.Length);
+
+            // For 8 neighbors, add diagonals
+            int[] offsets = {
+                            -1, +1,             // left, right
+                            -width, +width,     // up, down
+                            -width-1, -width+1,
+                            +width-1, +width+1
+                        };
+
+
+            for (int iteration = 1; iteration <= uvPadding; iteration++)
             {
                 token.ThrowIfCancellationRequested();
 
-                for (int x = 0; x < width; x++)
+                // We’ll build a new array for the “next” state after this iteration
+                int[] newPixelData = (int[])pixelData.Clone();
+
+                // For each pixel that is background, check neighbors
+                for (int yPos = 0; yPos < height; yPos++)
                 {
-                    token.ThrowIfCancellationRequested();
-
-                    int idx = x + y * width;
-                    int cid = islandMask[idx];
-                    var c = result.GetPixel(x, y);
-                    if (cid != -1 && c.ToArgb() != backgroundColor)
-                    {
-                        initialFront.Enqueue((x, y, 0, cid, c));
-                    }
-                }
-            }
-
-            if (uvPadding <= 0 || initialFront.Count == 0)
-            {
-                bfsProgress?.Invoke(1.0);
-                return result;
-            }
-
-            // 2) PASS #1: Dry-run BFS to count EXACT fillable pixels
-            bool[] visited = new bool[width * height];
-            long totalToFill = 0;
-
-            Queue<(int x, int y, int dist, int islandId, System.Drawing.Color color)> queueForCount =
-                new Queue<(int, int, int, int, System.Drawing.Color)>(initialFront);
-
-            int[] offsets = { -1, 1, -width, width };
-
-            while (queueForCount.Count > 0)
-            {
-                token.ThrowIfCancellationRequested();
-
-                var (cx, cy, dist, cid, col) = queueForCount.Dequeue();
-
-                if (dist < uvPadding)
-                {
-                    foreach (int off in offsets)
+                    for (int xPos = 0; xPos < width; xPos++)
                     {
                         token.ThrowIfCancellationRequested();
 
-                        int nx = cx, ny = cy;
-                        if (off == -1) nx = cx - 1;
-                        else if (off == 1) nx = cx + 1;
-                        else if (off == -width) ny = cy - 1;
-                        else if (off == width) ny = cy + 1;
+                        int idx = xPos + yPos * width;
 
-                        if (nx < 0 || nx >= width || ny < 0 || ny >= height)
-                            continue;
-
-                        int nIdx = nx + ny * width;
-
-                        if (islandMask[nIdx] == cid &&
-                            result.GetPixel(nx, ny).ToArgb() == backgroundColor &&
-                            !visited[nIdx])
+                        // If this pixel is background, see if it has a neighbor with the same island
+                        if (pixelData[idx] == backgroundColor)
                         {
-                            visited[nIdx] = true;
-                            totalToFill++;
-                            queueForCount.Enqueue((nx, ny, dist + 1, cid, col));
+                            int cid = islandMask[idx];
+                            if (cid == -1)
+                            {
+                                // It's truly outside any island => skip
+                                continue;
+                            }
+
+                            // We have a background pixel that belongs to an island in mask,
+                            // so let's see if we can get a neighbor's color from the same island.
+                            bool foundColor = false;
+                            int neighborColor = backgroundColor;
+
+                            foreach (int off in offsets)
+                            {
+                                int nx = xPos, ny = yPos;
+                                if (off == -1) nx = xPos - 1;
+                                else if (off == 1) nx = xPos + 1;
+                                else if (off == -width) ny = yPos - 1;
+                                else if (off == width) ny = yPos + 1;
+
+                                // Bounds check
+                                if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                                    continue;
+
+                                int nIdx = nx + ny * width;
+                                int neighborIsland = islandMask[nIdx];
+                                // neighbor is the same island & not background => we can “borrow” that color
+                                if (neighborIsland == cid && pixelData[nIdx] != backgroundColor)
+                                {
+                                    foundColor = true;
+                                    neighborColor = pixelData[nIdx];
+                                    break;
+                                }
+                            }
+
+                            // If found a same-island neighbor with real color => fill it
+                            if (foundColor)
+                            {
+                                newPixelData[idx] = neighborColor;
+                            }
                         }
                     }
                 }
+
+                // Copy the new state for next iteration
+                pixelData = newPixelData;
+
+                // (Optional) Provide progress for each iteration
+                double frac = (double)iteration / uvPadding;
+                if (frac > 1.0) frac = 1.0;
+                bfsProgress?.Invoke(frac);
             }
 
-            if (totalToFill == 0)
-            {
-                bfsProgress?.Invoke(1.0);
-                return result;
-            }
+            // 4) Copy final pixel data back and unlock
+            System.Runtime.InteropServices.Marshal.Copy(pixelData, 0, data.Scan0, pixelData.Length);
+            result.UnlockBits(data);
 
-            // 3) PASS #2: Actual BFS fill
-            long filledSoFar = 0;
-            Queue<(int x, int y, int dist, int islandId, System.Drawing.Color color)> queueForFilling =
-                new Queue<(int, int, int, int, System.Drawing.Color)>(initialFront);
-
-            while (queueForFilling.Count > 0)
-            {
-                token.ThrowIfCancellationRequested();
-
-                var (cx, cy, dist, cid, col) = queueForFilling.Dequeue();
-
-                if (dist < uvPadding)
-                {
-                    foreach (int off in offsets)
-                    {
-                        token.ThrowIfCancellationRequested();
-
-                        int nx = cx, ny = cy;
-                        if (off == -1) nx = cx - 1;
-                        else if (off == 1) nx = cx + 1;
-                        else if (off == -width) ny = cy - 1;
-                        else if (off == width) ny = cy + 1;
-
-                        if (nx < 0 || nx >= width || ny < 0 || ny >= height)
-                            continue;
-
-                        int nIdx = nx + ny * width;
-                        // Actually fill background pixels
-                        if (islandMask[nIdx] == cid &&
-                            result.GetPixel(nx, ny).ToArgb() == backgroundColor)
-                        {
-                            result.SetPixel(nx, ny, col);
-                            queueForFilling.Enqueue((nx, ny, dist + 1, cid, col));
-
-                            filledSoFar++;
-                            double frac = (double)filledSoFar / totalToFill;
-                            if (frac > 1.0) frac = 1.0;
-                            bfsProgress?.Invoke(frac);
-                        }
-                    }
-                }
-            }
-
+            // 5) Return the final dilated bitmap
             return result;
         }
-
-
-
-
         /// <summary>
         /// Computes a UV island ID for each triangle using the given UV channel.
-        /// Two triangles are grouped together if they share an edge in UV space (within a small tolerance).
+        /// Two triangles are grouped together if they share an edge in UV space
+        /// (within the provided floating-point tolerance).
+        /// 
+        /// By default, tolerance=1e-4 means we treat points that differ by less
+        /// than 0.0001 as "the same," but you can choose a smaller or larger
+        /// tolerance to control whether nearly adjacent UV edges are merged.
         /// </summary>
-        private static int[] ComputeUVIslands(Assimp.Mesh mesh, int uvChannel, float tolerance = 0.001f)
+        /// <param name="mesh">The mesh to analyze.</param>
+        /// <param name="uvChannel">The UV channel index to read from.</param>
+        /// <param name="tolerance">
+        /// Any two UVs that differ by less than 'tolerance' are considered identical
+        /// when building edges. e.g. 1e-5 => very tight matching.
+        /// </param>
+        /// <returns>
+        /// An array of length=mesh.FaceCount, giving an island ID for each face.
+        /// Faces that share edges in UV space (within tolerance) end up in the same island.
+        /// </returns>
+        private static int[] ComputeUVIslands(Assimp.Mesh mesh, int uvChannel, float tolerance = 1e-4f)
         {
             int triangleCount = mesh.FaceCount;
             int[] parent = new int[triangleCount];
@@ -1383,39 +1356,53 @@ namespace NormalSmith.Engine
                     parent[rootJ] = rootI;
             }
 
-            // Quantize a UV coordinate to an integer pair.
+            // Convert a UV coordinate to an integer pair, using tolerance as the "snap" size.
+            // Example: tolerance=1e-5 => multiply by 100000, then Round().
             (int, int) Quantize(Vector3D uv)
             {
-                int qx = (int)Math.Round(uv.X * 1000);
-                int qy = (int)Math.Round(uv.Y * 1000);
+                float scale = 1f / tolerance;
+                int qx = (int)Math.Round(uv.X * scale);
+                int qy = (int)Math.Round(uv.Y * scale);
                 return (qx, qy);
             }
 
-            // Build a dictionary mapping an edge key to the list of triangle indices sharing that edge.
+            // Build a dictionary mapping an "edge key" => list of triangle indices sharing that edge.
             var edgeDict = new Dictionary<(int, int, int, int), List<int>>();
+
             for (int tri = 0; tri < triangleCount; tri++)
             {
-                Face face = mesh.Faces[tri];
+                Assimp.Face face = mesh.Faces[tri];
                 if (face.IndexCount != 3)
                     continue;
+
+                // Grab the three UVs for this face
                 Vector3D uv0 = mesh.TextureCoordinateChannels[uvChannel][face.Indices[0]];
                 Vector3D uv1 = mesh.TextureCoordinateChannels[uvChannel][face.Indices[1]];
                 Vector3D uv2 = mesh.TextureCoordinateChannels[uvChannel][face.Indices[2]];
+
+                // Quantize to integer pairs
                 var q0 = Quantize(uv0);
                 var q1 = Quantize(uv1);
                 var q2 = Quantize(uv2);
 
-                // Define each edge as an order–independent tuple.
+                // Define each edge as an order–independent tuple of (minX, minY, maxX, maxY).
                 var edges = new List<(int, int, int, int)>
         {
-            (Math.Min(q0.Item1, q1.Item1), Math.Min(q0.Item2, q1.Item2),
-             Math.Max(q0.Item1, q1.Item1), Math.Max(q0.Item2, q1.Item2)),
-            (Math.Min(q1.Item1, q2.Item1), Math.Min(q1.Item2, q2.Item2),
-             Math.Max(q1.Item1, q2.Item1), Math.Max(q1.Item2, q2.Item2)),
-            (Math.Min(q2.Item1, q0.Item1), Math.Min(q2.Item2, q0.Item2),
-             Math.Max(q2.Item1, q0.Item1), Math.Max(q2.Item2, q0.Item2))
+            (
+                Math.Min(q0.Item1, q1.Item1), Math.Min(q0.Item2, q1.Item2),
+                Math.Max(q0.Item1, q1.Item1), Math.Max(q0.Item2, q1.Item2)
+            ),
+            (
+                Math.Min(q1.Item1, q2.Item1), Math.Min(q1.Item2, q2.Item2),
+                Math.Max(q1.Item1, q2.Item1), Math.Max(q1.Item2, q2.Item2)
+            ),
+            (
+                Math.Min(q2.Item1, q0.Item1), Math.Min(q2.Item2, q0.Item2),
+                Math.Max(q2.Item1, q0.Item1), Math.Max(q2.Item2, q0.Item2)
+            )
         };
 
+                // Add each edge to the dictionary
                 foreach (var edge in edges)
                 {
                     if (!edgeDict.TryGetValue(edge, out var list))
@@ -1426,19 +1413,26 @@ namespace NormalSmith.Engine
                     list.Add(tri);
                 }
             }
-            // Union triangles sharing an edge.
+
+            // Union triangles that share an edge in the dictionary
             foreach (var kvp in edgeDict)
             {
                 List<int> tris = kvp.Value;
-                for (int i = 1; i < tris.Count; i++)
-                    Union(tris[0], tris[i]);
+                if (tris.Count > 1)
+                {
+                    for (int i = 1; i < tris.Count; i++)
+                        Union(tris[0], tris[i]);
+                }
             }
-            // Flatten the union–find structure.
+
+            // Flatten the union–find structure
             int[] islandIDs = new int[triangleCount];
             for (int i = 0; i < triangleCount; i++)
                 islandIDs[i] = Find(i);
+
             return islandIDs;
         }
+
 
         /// <summary>
         /// Locates the node that references the specified mesh index in the Assimp scene hierarchy.
