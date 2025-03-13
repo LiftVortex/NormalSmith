@@ -168,6 +168,12 @@ namespace NormalSmith
             chkBackfaceProcessing.IsChecked = Properties.Settings.Default.BackfacingTris;
             chkAutoUpdate.IsChecked = Properties.Settings.Default.AutoCheckUpdates;
 
+            int savedAASamples = Properties.Settings.Default.AASamples; // <-- define a new setting
+            if (savedAASamples < 1) savedAASamples = 1;
+            if (savedAASamples > 8) savedAASamples = 8; // clamp if you want
+            sldAASamples.Value = savedAASamples;  // set slider
+            txtAASampleDisplay.Text = savedAASamples + "×";
+
             // Load fast preview option.
             fastPreviewEnabled = Properties.Settings.Default.FastPreview;
             chkFastPreview.IsChecked = fastPreviewEnabled;
@@ -275,7 +281,7 @@ namespace NormalSmith
             Properties.Settings.Default.SupersampleFactor = (int)sldSupersample.Value;
             Properties.Settings.Default.BackfacingTris = (chkBackfaceProcessing.IsChecked == true);
             Properties.Settings.Default.MeshSelectionIndex = cmbMeshSelection.SelectedIndex;
-
+            Properties.Settings.Default.AASamples = (int)sldAASamples.Value;
 
             // Save dark mode state and highlight color.
             Properties.Settings.Default.IsDarkMode = menuDarkModeToggle.IsChecked == true;
@@ -736,7 +742,15 @@ namespace NormalSmith
                 Properties.Settings.Default.LastAlphaPath = dlg.FileName;
             }
         }
-
+        private void sldAASamples_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            // If you have a label or textblock to show the current slider value:
+            if (txtAASampleDisplay != null)
+            {
+                int aaValue = (int)sldAASamples.Value;
+                txtAASampleDisplay.Text = aaValue + "×";
+            }
+        }
 
         /// <summary>
         /// Initiates the baking process, updating the UI during processing and saving the resulting maps.
@@ -762,6 +776,9 @@ namespace NormalSmith
                 occlusionThreshold = occThresh;
             if (float.TryParse(txtRayOriginBias.Text, out float originBias))
                 rayOriginBias = originBias;
+
+            int aaSamples = (int)sldAASamples.Value;
+            AARasterizer.SetSubSampleCount(aaSamples);
 
             if (!int.TryParse(txtWidth.Text, out textureWidth) ||
                 !int.TryParse(txtHeight.Text, out textureHeight))

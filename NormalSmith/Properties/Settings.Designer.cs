@@ -334,5 +334,17 @@ namespace NormalSmith.Properties {
                 this["AutoCheckUpdates"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("4")]
+        public int AASamples {
+            get {
+                return ((int)(this["AASamples"]));
+            }
+            set {
+                this["AASamples"] = value;
+            }
+        }
     }
 }

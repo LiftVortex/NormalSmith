@@ -317,6 +317,7 @@
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -364,10 +365,34 @@
                                          TextAlignment="Center"  
                                          Margin="0,0,0,5" 
                                          Height="30"/>
+
+                                    <!-- (New) AA Sub-samples Row -->
+                                    <TextBlock Grid.Row="3" Grid.Column="0"
+                                           Text="AA Sub-Samples:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,0,5"
+                                           ToolTip="Number of sub-samples for anti-aliasing."/>
+                                    <StackPanel Grid.Row="3" Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            Margin="0,0,0,5">
+                                        <Slider x:Name="sldAASamples"
+                                            Minimum="1"
+                                            Maximum="8"
+                                            TickFrequency="1"
+                                            Value="2"
+                                            IsSnapToTickEnabled="True"
+                                            Width="80"
+                                            ValueChanged="sldAASamples_ValueChanged"/>
+                                        <TextBlock x:Name="txtAASampleDisplay"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0"
+                                           Text="2×"
+                                           ToolTip="Current AA sub-sample setting"/>
+                                    </StackPanel>
                                 </Grid>
 
                                 <TextBlock Text="Occlusion Map" FontWeight="Bold" Margin="0,10,0,5" 
-                   ToolTip="Settings related to generating the occlusion map."/>
+                                            ToolTip="Settings related to generating the occlusion map."/>
                                 <Grid Margin="10,0,0,5">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>

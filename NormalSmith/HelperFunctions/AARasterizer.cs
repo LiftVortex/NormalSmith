@@ -13,7 +13,21 @@ namespace NormalSmith.HelperFunctions
     public static class AARasterizer
     {
         public static bool AllowBackFacing { get; set; } = false;
+        private static float[] currentOffsets = { 0.25f, 0.75f };
+        public static void SetSubSampleCount(int aaSamples)
+        {
+            // If user chooses 1 => single sample at 0.5
+            // If user chooses 2 => {0.25, 0.75}
+            // If user chooses 3 => {0.1667, 0.5, 0.8333}, etc.
 
+            if (aaSamples < 1) aaSamples = 1;
+            currentOffsets = new float[aaSamples];
+            for (int i = 0; i < aaSamples; i++)
+            {
+                // e.g. place them evenly between 0..1 => center them at (i+0.5)/aaSamples
+                currentOffsets[i] = (i + 0.5f) / aaSamples;
+            }
+        }
         /// <summary>
         /// Single-buffer 2x2 AA rasterizer:
         /// sampleFunc: (x, y, bary, uv) => returns ARGB int
@@ -27,7 +41,7 @@ namespace NormalSmith.HelperFunctions
             PointF p2,
             Func<int, int, Vector3, PointF, int> sampleFunc)
         {
-            float[] sampleOffsets = { 0.25f, 0.75f };
+            float[] sampleOffsets = currentOffsets;
 
             float minX = MathF.Min(p0.X, MathF.Min(p1.X, p2.X));
             float minY = MathF.Min(p0.Y, MathF.Min(p1.Y, p2.Y));
@@ -128,7 +142,7 @@ namespace NormalSmith.HelperFunctions
             PointF p2,
             DualSampleFunc sampleAction)
         {
-            float[] sampleOffsets = { 0.25f, 0.75f };
+            float[] sampleOffsets = currentOffsets;
 
             float minX = MathF.Min(p0.X, MathF.Min(p1.X, p2.X));
             float minY = MathF.Min(p0.Y, MathF.Min(p1.Y, p2.Y));
