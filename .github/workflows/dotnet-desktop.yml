@@ -120,30 +120,30 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Get commit message
-        id: commit
-        shell: pwsh
-        run: |
-          # Retrieve the commit message for the commit associated with the tag
-          $commitMessage = git log -1 --pretty=%B
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "commit_message=$commitMessage"
-
+        with:
+          fetch-depth: 0  # <-- Important so we get *all* commits, not just the tip!
+      
       - name: List commit titles since last release
         id: commit_titles
         shell: bash
         run: |
           # Force fetch all tags to update local tags.
           git fetch --tags --force
-          # Try to find the previous tag (skip the current one)
+
+          # Find the previous tag (skip the current one).
           PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
           echo "Previous tag: $PREV_TAG"
+
           if [ -z "$PREV_TAG" ]; then
-            # No previous tag found, list all commits as markdown links and filter out unwanted titles.
-            COMMITS=$(git log --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md" || true)
+            # No previous tag found, so list everything.
+            COMMITS=$(git log --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" \
+                         | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md" || true)
           else
-            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md" || true)
+            # List commits from PREV_TAG to HEAD.
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"* [%s](https://github.com/LiftVortex/NormalSmith/commit/%H)" \
+                         | grep -v -e "Update dotnet-desktop.yml" -e "Update README.md" || true)
           fi
+
           echo "Commit titles with links:"
           echo "$COMMITS"
           echo "commit_titles<<EOF" >> $GITHUB_OUTPUT
