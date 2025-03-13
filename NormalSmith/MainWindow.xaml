@@ -235,15 +235,42 @@
                                 </Grid>
 
                                 <!-- Supersample slider -->
-                                <StackPanel Orientation="Horizontal" Margin="0,10,0,5" VerticalAlignment="Center">
-                                    <TextBlock Text="Supersample Factor:" VerticalAlignment="Center" Width="140"
-                       ToolTip="Choose a factor for supersampling (e.g., 4x will process at 4x the resolution, then downsample and output at the resolution above). This can result in a much cleaner and less noisy result."/>
-                                    <Slider Name="sldSupersample" Minimum="1" Maximum="8" Value="1" TickFrequency="1"
-                    IsSnapToTickEnabled="True" Width="80" ValueChanged="sldSupersample_ValueChanged"/>
-                                    <!-- Display the current supersample factor -->
-                                    <TextBlock Name="txtSupersampleDisplay" VerticalAlignment="Center" Margin="10,0,0,0"
-                       Text="1×" ToolTip="Current supersample factor"/>
-                                </StackPanel>
+                                <Grid Margin="0,10,0,5" VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <!-- Column 0: Auto for the "Supersample Factor:" text -->
+                                        <ColumnDefinition Width="Auto" />
+                                        <!-- Column 1: Star for the slider, so it can stretch -->
+                                        <ColumnDefinition Width="*" />
+                                        <!-- Column 2: Auto for the supersample display -->
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Text label in the first column -->
+                                    <TextBlock Grid.Column="0"
+                                       Text="Supersample Factor:"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,10,0"
+                                       ToolTip="Choose a factor for supersampling..." />
+
+                                    <!-- Slider in the second (star) column -->
+                                    <Slider x:Name="sldSupersample"
+                                        Grid.Column="1"
+                                        Minimum="1"
+                                        Maximum="8"
+                                        Value="1"
+                                        TickFrequency="1"
+                                        IsSnapToTickEnabled="True"
+                                        ValueChanged="sldSupersample_ValueChanged"
+                                        HorizontalAlignment="Stretch" />
+
+                                    <!-- Display the current supersample factor in the third column -->
+                                    <TextBlock x:Name="txtSupersampleDisplay"
+                                       Grid.Column="2"
+                                       VerticalAlignment="Center"
+                                       Margin="10,0,0,0"
+                                       Text="1×"
+                                       ToolTip="Current supersample factor" />
+                                </Grid>
                             </StackPanel>
                         </GroupBox>
 
@@ -372,23 +399,33 @@
                                            VerticalAlignment="Center"
                                            Margin="0,0,0,5"
                                            ToolTip="Number of sub-samples for anti-aliasing."/>
-                                    <StackPanel Grid.Row="3" Grid.Column="1"
-                                            Orientation="Horizontal"
-                                            Margin="0,0,0,5">
+                                    <Grid Grid.Row="3" Grid.Column="1" Margin="0,0,0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <!-- Column 0: Star-sizing so the slider expands -->
+                                            <ColumnDefinition Width="*" />
+                                            <!-- Column 1: Auto-sizing for the text label -->
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Slider in the star-sized column -->
                                         <Slider x:Name="sldAASamples"
-                                            Minimum="1"
-                                            Maximum="8"
+                                            Grid.Column="0"
+                                            Minimum="1" 
+                                            Maximum="8" 
                                             TickFrequency="1"
                                             Value="2"
                                             IsSnapToTickEnabled="True"
-                                            Width="80"
-                                            ValueChanged="sldAASamples_ValueChanged"/>
-                                        <TextBlock x:Name="txtAASampleDisplay"
-                                           VerticalAlignment="Center"
-                                           Margin="10,0,0,0"
-                                           Text="2×"
-                                           ToolTip="Current AA sub-sample setting"/>
-                                    </StackPanel>
+                                            ValueChanged="sldAASamples_ValueChanged"
+                                            HorizontalAlignment="Stretch" />
+
+                                        <!-- Text label in the auto column -->
+                                        <TextBlock x:Name="txtAASampleDisplay" 
+                                               Grid.Column="1"
+                                               VerticalAlignment="Center" 
+                                               Margin="10,0,0,0"
+                                               Text="2×"
+                                               ToolTip="Current AA sub-sample setting" />
+                                    </Grid>
                                 </Grid>
 
                                 <TextBlock Text="Occlusion Map" FontWeight="Bold" Margin="0,10,0,5" 
