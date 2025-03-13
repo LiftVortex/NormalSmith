@@ -346,5 +346,17 @@ namespace NormalSmith.Properties {
                 this["AASamples"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("5")]
+        public int UVPadding {
+            get {
+                return ((int)(this["UVPadding"]));
+            }
+            set {
+                this["UVPadding"] = value;
+            }
+        }
     }
 }

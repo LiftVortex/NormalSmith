@@ -228,7 +228,7 @@
                                     <TextBox Grid.Row="1" Grid.Column="1" Name="txtHeight" Text="1024" ToolTip="Enter the desired height (in pixels) for the baked texture. Match this with the width for a square texture or adjust as needed." TextAlignment="Center"  Margin="0,0,0,5"/>
 
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="UV Padding (px):" VerticalAlignment="Center"
-                                                ToolTip="Number of pixels to pad the UV islands."/>
+                                                ToolTip="Specifies the number of extra pixels to extend UV islands, which helps prevent edge artifacts during map blending."/>
                                     <TextBox Grid.Row="2" Grid.Column="1" Name="txtUvPadding" Text="2" TextAlignment="Center"
                                             ToolTip="Enter the number of pixels for UV padding."/>
 
@@ -250,7 +250,7 @@
                                        Text="Supersample Factor:"
                                        VerticalAlignment="Center"
                                        Margin="0,0,10,0"
-                                       ToolTip="Choose a factor for supersampling..." />
+                                       ToolTip="Choose a factor for supersampling (e.g., 4x will process at 4x the resolution, then downsample and output at the resolution above). This can result in a much cleaner and less noisy result." />
 
                                     <!-- Slider in the second (star) column -->
                                     <Slider x:Name="sldSupersample"
@@ -383,7 +383,7 @@
                                     <TextBlock Grid.Row="2" Grid.Column="0" 
                                         Text="Ray Origin Bias: " 
                                         VerticalAlignment="Center" 
-                                        ToolTip="A small offset added to the ray origin to avoid self-intersection artifacts." 
+                                        ToolTip="A small offset applied to the starting point of each ray to prevent self-intersections during ray tracing." 
                                         Margin="0,0,0,5"/>
                                     <TextBox Grid.Row="2" Grid.Column="1" 
                                          Name="txtRayOriginBias" 
@@ -398,7 +398,7 @@
                                            Text="AA Sub-Samples:"
                                            VerticalAlignment="Center"
                                            Margin="0,0,0,5"
-                                           ToolTip="Number of sub-samples for anti-aliasing."/>
+                                           ToolTip="Specifies the number of sub-samples per pixel for anti-aliasing. Higher values smooth edges for improved image quality, but may impact performance."/>
                                     <Grid Grid.Row="3" Grid.Column="1" Margin="0,0,0,5">
                                         <Grid.ColumnDefinitions>
                                             <!-- Column 0: Star-sizing so the slider expands -->
@@ -444,7 +444,7 @@
                                        Text="Occlusion Threshold:" 
                                        VerticalAlignment="Center" 
                                        Width="140"
-                                       ToolTip="Threshold for occlusion; pixels with occlusion below this value may be clamped." 
+                                       ToolTip="Determines the minimum occlusion level. Values below this threshold may trigger a clamping effect to maintain ambient light." 
                                        Margin="0,0,0,5"/>
                                     <TextBox Grid.Row="0" Grid.Column="1" 
                                          Name="txtOcclusionThreshold" 

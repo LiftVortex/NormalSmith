@@ -167,6 +167,7 @@ namespace NormalSmith
             txtSupersampleDisplay.Text = ((int)sldSupersample.Value).ToString() + "×";
             chkBackfaceProcessing.IsChecked = Properties.Settings.Default.BackfacingTris;
             chkAutoUpdate.IsChecked = Properties.Settings.Default.AutoCheckUpdates;
+            txtUvPadding.Text = Properties.Settings.Default.UVPadding.ToString();
 
             int savedAASamples = Properties.Settings.Default.AASamples; // <-- define a new setting
             if (savedAASamples < 1) savedAASamples = 1;
@@ -283,6 +284,9 @@ namespace NormalSmith
             Properties.Settings.Default.MeshSelectionIndex = cmbMeshSelection.SelectedIndex;
             Properties.Settings.Default.AASamples = (int)sldAASamples.Value;
 
+            if (int.TryParse(txtUvPadding.Text, out int uVPaddingInt))
+                Properties.Settings.Default.UVPadding = uVPaddingInt;
+
             // Save dark mode state and highlight color.
             Properties.Settings.Default.IsDarkMode = menuDarkModeToggle.IsChecked == true;
             if (Resources["ButtonBackgroundBrush"] is SolidColorBrush brush)
@@ -391,7 +395,7 @@ namespace NormalSmith
                     else if (ext == ".bmp")
                         format = System.Drawing.Imaging.ImageFormat.Bmp;
                     lastBakeResult.BentMap.Save(dlgBent.FileName, format);
-                    System.Windows.MessageBox.Show("Bent Normal Map saved to: " + dlgBent.FileName);
+                    //System.Windows.MessageBox.Show("Bent Normal Map saved to: " + dlgBent.FileName);
                 }
             }
             
@@ -412,7 +416,7 @@ namespace NormalSmith
                     else if (ext == ".bmp")
                         format = System.Drawing.Imaging.ImageFormat.Bmp;
                     lastBakeResult.OccMap.Save(dlgOcc.FileName, format);
-                    System.Windows.MessageBox.Show("Occlusion Map saved to: " + dlgOcc.FileName);
+                    //System.Windows.MessageBox.Show("Occlusion Map saved to: " + dlgOcc.FileName);
                 }
             }
         }
