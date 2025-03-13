@@ -124,6 +124,7 @@ namespace NormalSmith.Engine
                 int[] singleBuffer = null;
                 int[] bentBuffer = null;
                 int[] occBuffer = null;
+
                 if (dualMode)
                 {
                     bentBuffer = new int[width * height];
@@ -131,9 +132,9 @@ namespace NormalSmith.Engine
                     for (int i = 0; i < width * height; i++)
                     {
                         // Set background for bent normal map to 7A7FFF (with full alpha: 0xFF7A7FFF)
-                        bentBuffer[i] = unchecked((int)0xFF7A7FFF);
+                        bentBuffer[i] = unchecked((int)0xFF000000);
                         // Set background for occlusion map to B9B9B9 (with full alpha: 0xFFB9B9B9)
-                        occBuffer[i] = unchecked((int)0xFFB9B9B9);
+                        occBuffer[i] = unchecked((int)0xFFFF0000);
                     }
                 }
                 else
@@ -143,12 +144,12 @@ namespace NormalSmith.Engine
                     if (generateBentNormalMap && !generateOcclusionMap)
                     {
                         for (int i = 0; i < singleBuffer.Length; i++)
-                            singleBuffer[i] = unchecked((int)0xFF7A7FFF);
+                            singleBuffer[i] = unchecked((int)0xFF000000);
                     }
                     else if (generateOcclusionMap && !generateBentNormalMap)
                     {
                         for (int i = 0; i < singleBuffer.Length; i++)
-                            singleBuffer[i] = unchecked((int)0xFFB9B9B9);
+                            singleBuffer[i] = unchecked((int)0xFFFF0000);
                     }
                 }
 
@@ -684,7 +685,7 @@ namespace NormalSmith.Engine
                     highResBmp.UnlockBits(bmpData);
 
                     // Choose the appropriate background color (for example, use the bent map background if generating bent normals).
-                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF7A7FFF) : unchecked((int)0xFFB9B9B9);
+                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF000000) : unchecked((int)0xFFFF0000);
                     int[] dilatedIslandMask;
                     // BFS #1 => go from 90%..95%
                     if (uvPadding > 0)
@@ -736,7 +737,21 @@ namespace NormalSmith.Engine
                     // At this point, BFS is done => we must be at 100%
                     progress.Report(1.0);
 
-                    if(supersampleFactor>1)
+                    invokeOnDispatcher(() => updateTitle("Replacing Background Color..."));
+
+                    if (generateBentNormalMap)
+                    {
+                        // For bent normal map in single mode, replace black with 0xFF7A7FFF.
+                        ReplaceBackgroundColor(highResBmp, unchecked((int)0xFF000000), unchecked((int)0xFF7A7FFF));
+                    }
+                    else if (generateOcclusionMap)
+                    {
+                        // For occlusion map in single mode, replace red with 0xFFB9B9B9.
+                        ReplaceBackgroundColor(highResBmp, unchecked((int)0xFFFF0000), unchecked((int)0xFFB9B9B9));
+                    }
+
+
+                    if (supersampleFactor>1)
                     {
                         invokeOnDispatcher(() => updateTitle("Downscaling Image..."));
                     }
@@ -803,9 +818,9 @@ namespace NormalSmith.Engine
                     highResOccBmp.UnlockBits(occData);
 
                     // Choose the appropriate background color (for example, use the bent map background if generating bent normals).
-                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF7A7FFF) : unchecked((int)0xFFB9B9B9);
+                    int bgColor = generateBentNormalMap ? unchecked((int)0xFF000000) : unchecked((int)0xFFFF0000);
                     // Choose the occlusion background color.
-                    int bgColor2 = unchecked((int)0xFFB9B9B9);
+                    int bgColor2 = unchecked((int)0xFFFF0000);
 
                     int[] dilatedIslandMask;
                     // BFS #1 => go from 90%..95%
@@ -877,6 +892,15 @@ namespace NormalSmith.Engine
                         progress.Report(1.0);
                     }
 
+                    invokeOnDispatcher(() => updateTitle("Replacing Background Color..."));
+
+                    // Replace background in the high-res Bent Map: change black (0xFF000000) to 0xFF7A7FFF.
+                    ReplaceBackgroundColor(highResBentBmp, unchecked((int)0xFF000000), unchecked((int)0xFF7A7FFF));
+
+                    // Replace background in the high-res Occlusion Map: change red (0xFFFF0000) to 0xFFB9B9B9.
+                    ReplaceBackgroundColor(highResOccBmp, unchecked((int)0xFFFF0000), unchecked((int)0xFFB9B9B9));
+
+
                     if (supersampleFactor > 1)
                     {
                         invokeOnDispatcher(() => updateTitle("Downscaling Images..."));
@@ -919,80 +943,6 @@ namespace NormalSmith.Engine
         #endregion
 
         #region Helper Methods
-
-        private static Bitmap ParallelDownscaleHighQuality(
-            Bitmap highResBmp,
-            int finalWidth,
-            int finalHeight,
-            IProgress<double> progress,
-            CancellationToken token)
-        {
-            // Create the final output bitmap.
-            Bitmap finalBmp = new Bitmap(finalWidth, finalHeight, highResBmp.PixelFormat);
-
-            // For simplicity, we split the image vertically into a number of sections.
-            // You can adjust numSections based on processor count or a fixed value.
-            int numSections = 4;  // For example, split into 4 vertical sections.
-            int sectionWidth = finalWidth / numSections;
-
-            // Determine scale factors from the high-res image to the final image.
-            double scaleX = (double)highResBmp.Width / finalWidth;
-            double scaleY = (double)highResBmp.Height / finalHeight;
-
-            // Lock object to protect finalBmp while merging sections.
-            object finalBmpLock = new object();
-
-            // Create tasks for each section.
-            List<Task> tasks = new List<Task>();
-            for (int i = 0; i < numSections; i++)
-            {
-                // Calculate the destination rectangle for this section.
-                int destX = i * sectionWidth;
-                int destWidth = (i == numSections - 1) ? (finalWidth - destX) : sectionWidth;
-                Rectangle destRect = new Rectangle(destX, 0, destWidth, finalHeight);
-
-                // Calculate the corresponding source rectangle.
-                // We assume a uniform scale in X and Y.
-                Rectangle sourceRect = new Rectangle(
-                    (int)(destRect.X * scaleX),
-                    0,
-                    (int)(destRect.Width * scaleX),
-                    highResBmp.Height);  // Using the full height of the high-res image
-
-                // Create a task for processing this section.
-                tasks.Add(Task.Run(() =>
-                {
-                    token.ThrowIfCancellationRequested();
-
-                    // Create a temporary bitmap for this section.
-                    using (Bitmap sectionBmp = new Bitmap(destRect.Width, destRect.Height, highResBmp.PixelFormat))
-                    {
-                        // Use Graphics to perform high-quality bicubic downscaling on this section.
-                        using (Graphics g = Graphics.FromImage(sectionBmp))
-                        {
-                            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                            g.DrawImage(highResBmp, new Rectangle(0, 0, destRect.Width, destRect.Height), sourceRect, GraphicsUnit.Pixel);
-                        }
-
-                        // Copy the downscaled section into the final bitmap.
-                        lock (finalBmpLock)
-                        {
-                            using (Graphics gFinal = Graphics.FromImage(finalBmp))
-                            {
-                                gFinal.DrawImage(sectionBmp, destRect);
-                            }
-                        }
-                    }
-                    // Report progress for this section.
-                    progress?.Report((double)(i + 1) / numSections);
-                }, token));
-            }
-
-            // Wait for all sections to finish.
-            Task.WaitAll(tasks.ToArray());
-
-            return finalBmp;
-        }
 
         private static Bitmap NearestNeighborDownscale(Bitmap source, int newWidth, int newHeight)
         {
@@ -1042,103 +992,36 @@ namespace NormalSmith.Engine
 
             return dest;
         }
-
-
-        private static Bitmap ApplyUvPadding(Bitmap source, int padding)
-        {
-            Bitmap padded = (Bitmap)source.Clone();
-            int width = padded.Width;
-            int height = padded.Height;
-
-            // Perform iterative dilation for the specified padding amount.
-            for (int iter = 0; iter < padding; iter++)
-            {
-                Bitmap temp = (Bitmap)padded.Clone();
-                for (int x = 1; x < width - 1; x++)
-                {
-                    for (int y = 1; y < height - 1; y++)
-                    {
-                        System.Drawing.Color current = padded.GetPixel(x, y);
-                        // Assume the background is pure black (0xFF000000). Adjust if necessary.
-                        if (current.ToArgb() == unchecked((int)0xFF000000))
-                        {
-                            // Check neighboring pixels.
-                            System.Drawing.Color left = padded.GetPixel(x - 1, y);
-                            System.Drawing.Color right = padded.GetPixel(x + 1, y);
-                            System.Drawing.Color up = padded.GetPixel(x, y - 1);
-                            System.Drawing.Color down = padded.GetPixel(x, y + 1);
-                            // If any neighbor is non-background, set this pixel to that color.
-                            if (left.ToArgb() != unchecked((int)0xFF000000))
-                                temp.SetPixel(x, y, left);
-                            else if (right.ToArgb() != unchecked((int)0xFF000000))
-                                temp.SetPixel(x, y, right);
-                            else if (up.ToArgb() != unchecked((int)0xFF000000))
-                                temp.SetPixel(x, y, up);
-                            else if (down.ToArgb() != unchecked((int)0xFF000000))
-                                temp.SetPixel(x, y, down);
-                        }
-                    }
-                }
-                padded.Dispose();
-                padded = temp;
-            }
-            return padded;
-        }
-
         /// <summary>
-        /// Expands each island ID in the given 'mask' array by 'uvPadding' pixels.
-        /// Morphologically dilates any pixel whose mask ID is >= 0, so that any background pixel (-1)
-        /// that touches an island becomes that island's ID. This is a replacement for the BFS mask-expansion.
+        /// Expands the island IDs outward by uvPadding pixels using a standard morphological dilation.
+        /// For each iteration, any background pixel (value == -1) that has at least one 4‑neighbor with a valid
+        /// island ID is set to that island ID. This process is repeated uvPadding times.
         /// </summary>
-        /// <param name="mask">An integer array of length width*height, where -1=background, or an integer island ID.</param>
-        /// <param name="width">Image width.</param>
-        /// <param name="height">Image height.</param>
-        /// <param name="uvPadding">Distance (in pixels) to expand island IDs outward.</param>
-        /// <param name="token">Cancellation token for aborting.</param>
-        /// <param name="bfsProgress">Optional callback for progress, from 0..1.</param>
-        /// <returns>An expanded integer array, same size, with islands grown outward by 'uvPadding' pixels.</returns>
         private static int[] DilateIslandMask(
             int[] mask,
             int width,
             int height,
             int uvPadding,
             CancellationToken token,
-            Action<double> bfsProgress = null
-        )
+            Action<double> progress = null)
         {
-            // 1) If no padding, just return a copy (no changes).
-            if (uvPadding <= 0)
-            {
-                bfsProgress?.Invoke(1.0);
-                return (int[])mask.Clone();
-            }
-
-            // We'll do 'uvPadding' passes; each pass grows the mask out by 1 pixel in all directions.
             int[] result = (int[])mask.Clone();
-
-            // We only do 4-neighbor expansions here, to match your BFS code's up/down/left/right logic.
-            // If you'd like 8 neighbors, just add the diagonals.
             int[] offsets = { -1, 1, -width, width };
-
-            // 2) Morphologically expand in layers.
             for (int iteration = 1; iteration <= uvPadding; iteration++)
             {
                 token.ThrowIfCancellationRequested();
-
-                // We'll create a new array for the next "layer" so we don't partially overwrite ourselves.
                 int[] nextMask = (int[])result.Clone();
 
-                // For each pixel that is currently -1, see if any neighbor has a valid island ID.
                 for (int y = 0; y < height; y++)
                 {
                     for (int x = 0; x < width; x++)
                     {
-                        token.ThrowIfCancellationRequested();
-
                         int idx = x + y * width;
-                        if (result[idx] == -1) // background
+                        // If this pixel is background
+                        if (result[idx] == -1)
                         {
-                            // Check neighbors
+                            int islandId = -1;
+                            // Check 4-neighbors
                             foreach (int off in offsets)
                             {
                                 int nx = x, ny = y;
@@ -1147,60 +1030,28 @@ namespace NormalSmith.Engine
                                 else if (off == -width) ny = y - 1;
                                 else if (off == width) ny = y + 1;
 
-                                // Bounds check
                                 if (nx < 0 || nx >= width || ny < 0 || ny >= height)
                                     continue;
 
                                 int nIdx = nx + ny * width;
-                                int neighborIslandId = result[nIdx];
-
-                                // If neighbor has a valid island, adopt it
-                                if (neighborIslandId != -1)
+                                if (result[nIdx] != -1)
                                 {
-                                    nextMask[idx] = neighborIslandId;
-                                    break;  // We found an island neighbor, so we can stop checking
+                                    islandId = result[nIdx];
+                                    break;
                                 }
                             }
+                            if (islandId != -1)
+                                nextMask[idx] = islandId;
                         }
                     }
                 }
 
-                // Copy the newly expanded mask for the next iteration
                 result = nextMask;
-
-                // (Optional) Provide iteration-based progress
-                double frac = (double)iteration / uvPadding;
-                if (frac > 1.0) frac = 1.0;
-                bfsProgress?.Invoke(frac);
+                progress?.Invoke((double)iteration / uvPadding);
             }
-
-            // 3) Return the final grown mask
-            bfsProgress?.Invoke(1.0);
+            progress?.Invoke(1.0);
             return result;
         }
-
-        /// <summary>
-        /// Morphologically dilates each UV island by 'uvPadding' pixels, 
-        /// filling the background color around each island with the island's color.
-        /// This replaces the BFS-based color dilation, but yields the same final result
-        /// in a simpler and often faster way.
-        /// </summary>
-        /// <param name="source">The source bitmap (ARGB).</param>
-        /// <param name="islandMask">
-        /// An array of length (width*height) that gives the island ID for each pixel, or -1 for background.
-        /// </param>
-        /// <param name="width">Bitmap width.</param>
-        /// <param name="height">Bitmap height.</param>
-        /// <param name="uvPadding">Distance in pixels to expand around the island.</param>
-        /// <param name="backgroundColor">ARGB integer indicating background color (e.g. 0xFF000000).</param>
-        /// <param name="token">Cancellation token to allow user to abort.</param>
-        /// <param name="bfsProgress">
-        /// Optional progress callback, reporting fraction from 0..1 across all iterations.
-        /// </param>
-        /// <returns>
-        /// A new Bitmap in which each island’s color has been expanded by `uvPadding` pixels 
-        /// into the background.
-        /// </returns>
         private static Bitmap ApplyIslandColorDilation(
             Bitmap source,
             int[] islandMask,
@@ -1209,79 +1060,56 @@ namespace NormalSmith.Engine
             int uvPadding,
             int backgroundColor,
             CancellationToken token,
-            Action<double> bfsProgress = null
-        )
+            Action<double> progress = null)
         {
-            // 1) If no padding, just return a clone
-            if (uvPadding <= 0)
-            {
-                bfsProgress?.Invoke(1.0);
-                return (Bitmap)source.Clone();
-            }
-
-            // 2) Clone and lock the bitmap
             Bitmap result = (Bitmap)source.Clone();
             var rect = new Rectangle(0, 0, width, height);
-            var data = result.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadWrite, result.PixelFormat);
+            var data = result.LockBits(rect, ImageLockMode.ReadWrite, result.PixelFormat);
 
             int[] pixelData = new int[width * height];
             System.Runtime.InteropServices.Marshal.Copy(data.Scan0, pixelData, 0, pixelData.Length);
 
-            // For 8 neighbors, add diagonals
-            int[] offsets = {
-                            -1, +1,             // left, right
-                            -width, +width,     // up, down
-                            -width-1, -width+1,
-                            +width-1, +width+1
-                        };
-
+            // 8-neighbor offsets
+            int[] offsets = { -1, 1, -width, width, -width - 1, -width + 1, width - 1, width + 1 };
 
             for (int iteration = 1; iteration <= uvPadding; iteration++)
             {
                 token.ThrowIfCancellationRequested();
-
-                // We’ll build a new array for the “next” state after this iteration
                 int[] newPixelData = (int[])pixelData.Clone();
 
-                // For each pixel that is background, check neighbors
-                for (int yPos = 0; yPos < height; yPos++)
+                for (int y = 0; y < height; y++)
                 {
-                    for (int xPos = 0; xPos < width; xPos++)
+                    for (int x = 0; x < width; x++)
                     {
-                        token.ThrowIfCancellationRequested();
-
-                        int idx = xPos + yPos * width;
-
-                        // If this pixel is background, see if it has a neighbor with the same island
+                        int idx = x + y * width;
+                        // Process only background pixels
                         if (pixelData[idx] == backgroundColor)
                         {
                             int cid = islandMask[idx];
                             if (cid == -1)
-                            {
-                                // It's truly outside any island => skip
                                 continue;
-                            }
 
-                            // We have a background pixel that belongs to an island in mask,
-                            // so let's see if we can get a neighbor's color from the same island.
                             bool foundColor = false;
                             int neighborColor = backgroundColor;
 
                             foreach (int off in offsets)
                             {
-                                int nx = xPos, ny = yPos;
-                                if (off == -1) nx = xPos - 1;
-                                else if (off == 1) nx = xPos + 1;
-                                else if (off == -width) ny = yPos - 1;
-                                else if (off == width) ny = yPos + 1;
+                                int nx = x, ny = y;
+                                if (off == -1) nx = x - 1;
+                                else if (off == 1) nx = x + 1;
+                                else if (off == -width) ny = y - 1;
+                                else if (off == width) ny = y + 1;
+                                else if (off == -width - 1) { nx = x - 1; ny = y - 1; }
+                                else if (off == -width + 1) { nx = x + 1; ny = y - 1; }
+                                else if (off == width - 1) { nx = x - 1; ny = y + 1; }
+                                else if (off == width + 1) { nx = x + 1; ny = y + 1; }
 
-                                // Bounds check
                                 if (nx < 0 || nx >= width || ny < 0 || ny >= height)
                                     continue;
 
                                 int nIdx = nx + ny * width;
                                 int neighborIsland = islandMask[nIdx];
-                                // neighbor is the same island & not background => we can “borrow” that color
+                                // Propagate color if the neighbor belongs to the same island and is not background.
                                 if (neighborIsland == cid && pixelData[nIdx] != backgroundColor)
                                 {
                                     foundColor = true;
@@ -1289,30 +1117,19 @@ namespace NormalSmith.Engine
                                     break;
                                 }
                             }
-
-                            // If found a same-island neighbor with real color => fill it
                             if (foundColor)
-                            {
                                 newPixelData[idx] = neighborColor;
-                            }
                         }
                     }
                 }
 
-                // Copy the new state for next iteration
                 pixelData = newPixelData;
-
-                // (Optional) Provide progress for each iteration
-                double frac = (double)iteration / uvPadding;
-                if (frac > 1.0) frac = 1.0;
-                bfsProgress?.Invoke(frac);
+                progress?.Invoke((double)iteration / uvPadding);
             }
 
-            // 4) Copy final pixel data back and unlock
             System.Runtime.InteropServices.Marshal.Copy(pixelData, 0, data.Scan0, pixelData.Length);
             result.UnlockBits(data);
-
-            // 5) Return the final dilated bitmap
+            progress?.Invoke(1.0);
             return result;
         }
         /// <summary>
@@ -1431,6 +1248,24 @@ namespace NormalSmith.Engine
                 islandIDs[i] = Find(i);
 
             return islandIDs;
+        }
+        // Helper method to replace specific background colors in a bitmap.
+        private static void ReplaceBackgroundColor(Bitmap bmp, int targetColor, int newColor)
+        {
+            Rectangle rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+            BitmapData bmpData = bmp.LockBits(rect, ImageLockMode.ReadWrite, bmp.PixelFormat);
+            int pixelCount = bmp.Width * bmp.Height;
+            int[] pixels = new int[pixelCount];
+            Marshal.Copy(bmpData.Scan0, pixels, 0, pixelCount);
+
+            for (int i = 0; i < pixelCount; i++)
+            {
+                if (pixels[i] == targetColor)
+                    pixels[i] = newColor;
+            }
+
+            Marshal.Copy(pixels, 0, bmpData.Scan0, pixelCount);
+            bmp.UnlockBits(bmpData);
         }
 
 
