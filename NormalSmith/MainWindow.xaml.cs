@@ -91,6 +91,9 @@ namespace NormalSmith
         // Save the latest bake results
         private BakeResult lastBakeResult = null;
 
+        private Task<BakeResult> currentBakingTask = null;
+
+
         #endregion
 
         #region Private Types
@@ -761,11 +764,33 @@ namespace NormalSmith
         /// </summary>
         private async void btnBake_Click(object sender, RoutedEventArgs e)
         {
-            // Cancel any ongoing bake if one is active.
-            if (bakeCancellationTokenSource != null && !bakeCancellationTokenSource.IsCancellationRequested)
+            // If a bake is already running, cancel it and disable the button until cancellation completes.
+            if (bakeCancellationTokenSource != null)
             {
-                bakeCancellationTokenSource.Cancel();
-                btnBake.Content = "Bake Maps";
+                if (!bakeCancellationTokenSource.IsCancellationRequested)
+                {
+                    bakeCancellationTokenSource.Cancel();
+                    btnBake.Content = "Cancelling...";
+                    // Disable the Bake/Cancel button until the current bake fully cancels.
+                    btnBake.IsEnabled = false;
+                    try
+                    {
+                        // Await the currently running baking task to finish cancellation.
+                        await currentBakingTask;
+
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Expected cancellation.
+                    }
+                    finally
+                    {
+                        btnBake.Content = "Bake Maps";
+                        btnBake.IsEnabled = true;
+                        bakeCancellationTokenSource = null;
+                        currentBakingTask = null;
+                    }
+                }
                 return;
             }
 
@@ -812,7 +837,6 @@ namespace NormalSmith
             {
                 var progress = new Progress<double>(p =>
                 {
-                    //this.Title = $"Baking... {p:P0}";
                     taskbarInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.Normal;
                     taskbarInfo.ProgressValue = p;
                 });
@@ -820,8 +844,8 @@ namespace NormalSmith
                 int alphaUVIndex = cmbAlphaMapUV.SelectedIndex;
                 bool clampOcclusion = chkClampOcclusion.IsChecked == false;
 
-                // Start the baking process using the BakingEngine.
-                BakeResult bakeResult = await BakingEngine.BakeBentNormalMapAsync(
+                // Start the baking process using the BakingEngine and store the task.
+                currentBakingTask = BakingEngine.BakeBentNormalMapAsync(
                     modelPath, textureWidth, textureHeight,
                     useTangentSpace, useCosineDistribution,
                     generateBentNormalMap, generateOcclusionMap,
@@ -841,9 +865,12 @@ namespace NormalSmith
                     uvPadding
                 );
 
+                BakeResult bakeResult = await currentBakingTask;
+
                 // Bake process completed successfully
                 btnBake.Content = "Bake Maps";
                 bakeCancellationTokenSource = null;
+                currentBakingTask = null;
                 taskbarInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.None;
                 this.Title = "Normal Smith v" + newTitle.Remove(newTitle.Length - 2);
 
@@ -855,13 +882,12 @@ namespace NormalSmith
 
                 // Notify the user that the bake is complete.
                 System.Windows.MessageBox.Show("Bake complete! The Save Maps button is now enabled.", "Bake Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-
-
             }
             catch (OperationCanceledException)
             {
                 btnBake.Content = "Bake Maps";
                 bakeCancellationTokenSource = null;
+                currentBakingTask = null;
                 taskbarInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.None;
                 this.Title = "Normal Smith v" + newTitle.Remove(newTitle.Length - 2);
             }
@@ -870,8 +896,10 @@ namespace NormalSmith
                 System.Windows.MessageBox.Show("Error: " + ex.Message);
                 btnBake.Content = "Bake Maps";
                 bakeCancellationTokenSource = null;
+                currentBakingTask = null;
             }
         }
+
         private void PopulateUVOptionsForMesh(Assimp.Mesh mesh)
         {
             int uvCount = mesh.TextureCoordinateChannelCount;

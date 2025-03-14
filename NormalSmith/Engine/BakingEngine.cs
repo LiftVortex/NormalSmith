@@ -18,6 +18,7 @@ using NormalSmith.DataStructure;
 using NormalSmith.HelperFunctions;
 using System.Windows.Forms;
 using System.Windows.Media;
+using System.Diagnostics;
 
 namespace NormalSmith.Engine
 {
@@ -356,13 +357,24 @@ namespace NormalSmith.Engine
 
                             if(uvPadding > 0)
                             {
-                                progressMultiplier = 0.5f;
+                                progressMultiplier = 0.9f;
                             }
                             
                             fractionComplete = fractionComplete * progressMultiplier;
                             progress.Report(fractionComplete);
                             // 4) Update title with progress and ETA
-                            invokeOnDispatcher(() => updateTitle($"Baking... {fractionComplete:P0} {remainingTimeText}"));
+
+                            invokeOnDispatcher(() =>
+                            {
+                                if (!token.IsCancellationRequested)
+                                {
+                                    updateTitle($"Baking... {fractionComplete:P0} {remainingTimeText}");
+                                }
+                                else
+                                {
+                                    Debug.WriteLine("Still Baking");
+                                }
+                            });
                         }
 
                         // 5) Provide a preview image to the UI 
@@ -674,7 +686,7 @@ namespace NormalSmith.Engine
                         });
                     }
 
-                    invokeOnDispatcher(() => updateTitle("Copying from buffer... 50%"));
+                    invokeOnDispatcher(() => updateTitle("Copying from buffer...%"));
                     // Single mode: only one map is generated.
                     Bitmap highResBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                     var bmpData = highResBmp.LockBits(
@@ -690,13 +702,13 @@ namespace NormalSmith.Engine
                     // BFS #1 => go from 90%..95%
                     if (uvPadding > 0)
                     {
-                        double start1 = 0.50;
-                        double chunk1 = 0.25;
+                        double start1 = 0.90;
+                        double chunk1 = 0.05;
                         dilatedIslandMask = DilateIslandMask(islandBuffer, width, height, uvPadding, token, frac =>
                         {
                             // Map local BFS fraction (0..1) => overall progress slice, if you want
                             // e.g. 90..95%
-                            double overall = 0.50 + frac * 0.25;
+                            double overall = 0.90 + frac * 0.05;
                             progress.Report(overall);
 
                             // Update window title on UI thread
@@ -707,8 +719,8 @@ namespace NormalSmith.Engine
                         });
 
                         // BFS #2 => go from 95%..100%
-                        double start2 = 0.75;
-                        double chunk2 = 0.25;
+                        double start2 = 0.95;
+                        double chunk2 = 0.05;
                         highResBmp = ApplyIslandColorDilation(
                             highResBmp,
                             dilatedIslandMask,
@@ -720,7 +732,7 @@ namespace NormalSmith.Engine
                             frac =>
                             {
                                 // e.g. 95..100%
-                                double overall = 0.75 + frac * 0.25;
+                                double overall = 0.95 + frac * 0.05;
                                 progress.Report(overall);
                                 invokeOnDispatcher(() => {
                                     updateTitle($"Island Padding (Map)... {overall * 100:0}%");
@@ -796,7 +808,7 @@ namespace NormalSmith.Engine
                     }
 
                     // Dual mode: both Bent and Occlusion maps are generated.
-                    invokeOnDispatcher(() => updateTitle("Copying from buffer... 50%"));
+                    invokeOnDispatcher(() => updateTitle("Copying from buffer..."));
                     // Create separate high-resolution bitmaps for bent and occlusion maps.
                     Bitmap highResBentBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                     Bitmap highResOccBmp = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
@@ -826,13 +838,13 @@ namespace NormalSmith.Engine
                     // BFS #1 => go from 90%..95%
                     if (uvPadding > 0)
                     {
-                        double start1 = 0.50;
-                        double chunk1 = 0.17;
+                        double start1 = 0.90;
+                        double chunk1 = 0.03;
                         dilatedIslandMask = DilateIslandMask(islandBuffer, width, height, uvPadding, token, frac =>
                         {
                             // Map local BFS fraction (0..1) => overall progress slice, if you want
                             // e.g. 90..95%
-                            double overall = 0.50 + frac * 0.17;
+                            double overall = 0.90 + frac * 0.03;
                             progress.Report(overall);
 
                             // Update window title on UI thread
@@ -843,8 +855,8 @@ namespace NormalSmith.Engine
                         });
 
                         // BFS #2 => go from 95%..100%
-                        double start2 = 0.67;
-                        double chunk2 = 0.16;
+                        double start2 = 0.93;
+                        double chunk2 = 0.03;
                         highResBentBmp = ApplyIslandColorDilation(
                             highResBentBmp,
                             dilatedIslandMask,
@@ -856,7 +868,7 @@ namespace NormalSmith.Engine
                             frac =>
                             {
                                 // e.g. 95..100%
-                                double overall = 0.67 + frac * 0.16;
+                                double overall = 0.93 + frac * 0.03;
                                 progress.Report(overall);
                                 invokeOnDispatcher(() => {
                                     updateTitle($"Island Padding (Bent Map)... {overall * 100:0}%");
@@ -865,8 +877,8 @@ namespace NormalSmith.Engine
                         );
 
                         // BFS #2 => go from 95%..100%
-                        double start3 = 0.83;
-                        double chunk3 = 0.17;
+                        double start3 = 0.96;
+                        double chunk3 = 0.04;
                         highResOccBmp = ApplyIslandColorDilation(
                             highResOccBmp,
                             dilatedIslandMask,
@@ -878,7 +890,7 @@ namespace NormalSmith.Engine
                             frac =>
                             {
                                 // e.g. 95..100%
-                                double overall = 0.83 + frac * 0.17;
+                                double overall = 0.96 + frac * 0.04;
                                 progress.Report(overall);
                                 invokeOnDispatcher(() => {
                                     updateTitle($"Island Padding (Occ Map) {overall * 100:0}%");
