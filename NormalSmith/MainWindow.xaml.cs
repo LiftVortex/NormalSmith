@@ -372,7 +372,7 @@ namespace NormalSmith
             creditsWindow.Owner = this; // Optional: makes it a child window
             creditsWindow.ShowDialog(); // Use ShowDialog() for a modal window
         }
-        private void btnSave_Click(object sender, RoutedEventArgs e)
+        private async void btnSave_Click(object sender, RoutedEventArgs e)
         {
             if (lastBakeResult == null)
             {
@@ -380,10 +380,9 @@ namespace NormalSmith
                 return;
             }
 
-            // If both Bent Normal and Occlusion maps are generated:
+            // Save Bent Normal Map if available:
             if (lastBakeResult.BentMap != null)
             {
-                // Save Bent Normal Map
                 var dlgBent = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "PNG Image|*.png|JPEG Image|*.jpg|Bitmap Image|*.bmp",
@@ -391,20 +390,28 @@ namespace NormalSmith
                 };
                 if (dlgBent.ShowDialog() == true)
                 {
-                    System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Png;
-                    string ext = System.IO.Path.GetExtension(dlgBent.FileName).ToLower();
-                    if (ext == ".jpg" || ext == ".jpeg")
-                        format = System.Drawing.Imaging.ImageFormat.Jpeg;
-                    else if (ext == ".bmp")
-                        format = System.Drawing.Imaging.ImageFormat.Bmp;
-                    lastBakeResult.BentMap.Save(dlgBent.FileName, format);
-                    //System.Windows.MessageBox.Show("Bent Normal Map saved to: " + dlgBent.FileName);
+                    // Create and show the saving dialog.
+                    SavingWindow savingDlg = new SavingWindow { Owner = this };
+                    savingDlg.Show();
+
+                    await Task.Run(() =>
+                    {
+                        System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Png;
+                        string ext = System.IO.Path.GetExtension(dlgBent.FileName).ToLower();
+                        if (ext == ".jpg" || ext == ".jpeg")
+                            format = System.Drawing.Imaging.ImageFormat.Jpeg;
+                        else if (ext == ".bmp")
+                            format = System.Drawing.Imaging.ImageFormat.Bmp;
+                        lastBakeResult.BentMap.Save(dlgBent.FileName, format);
+                    });
+
+                    savingDlg.Close();
                 }
             }
-            
+
+            // Save Occlusion Map if available:
             if (lastBakeResult.OccMap != null)
             {
-                // Save Occlusion Map
                 var dlgOcc = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "PNG Image|*.png|JPEG Image|*.jpg|Bitmap Image|*.bmp",
@@ -412,17 +419,25 @@ namespace NormalSmith
                 };
                 if (dlgOcc.ShowDialog() == true)
                 {
-                    System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Png;
-                    string ext = System.IO.Path.GetExtension(dlgOcc.FileName).ToLower();
-                    if (ext == ".jpg" || ext == ".jpeg")
-                        format = System.Drawing.Imaging.ImageFormat.Jpeg;
-                    else if (ext == ".bmp")
-                        format = System.Drawing.Imaging.ImageFormat.Bmp;
-                    lastBakeResult.OccMap.Save(dlgOcc.FileName, format);
-                    //System.Windows.MessageBox.Show("Occlusion Map saved to: " + dlgOcc.FileName);
+                    SavingWindow savingDlg = new SavingWindow { Owner = this };
+                    savingDlg.Show();
+
+                    await Task.Run(() =>
+                    {
+                        System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Png;
+                        string ext = System.IO.Path.GetExtension(dlgOcc.FileName).ToLower();
+                        if (ext == ".jpg" || ext == ".jpeg")
+                            format = System.Drawing.Imaging.ImageFormat.Jpeg;
+                        else if (ext == ".bmp")
+                            format = System.Drawing.Imaging.ImageFormat.Bmp;
+                        lastBakeResult.OccMap.Save(dlgOcc.FileName, format);
+                    });
+
+                    savingDlg.Close();
                 }
             }
         }
+
 
 
         /// <summary>
