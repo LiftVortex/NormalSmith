@@ -318,7 +318,7 @@
           Checked="chkBackfaceProcessing_Checked" Unchecked="chkBackfaceProcessing_Unchecked"/>
 
                                     <TextBlock Text="Occlusion Map" FontSize="14" FontWeight="DemiBold" Margin="0,10,0,5" />
-                                    <CheckBox Name="chkClampOcclusion" Content="Lerp Occlusion Towards Threshold" IsChecked="True" Margin="0,0,0,5" ToolTip="Values lower than the Occlusion Threshold will be boosted towards the threshold. This has the effect of lightening the darker areas without removing them. When this is off, any occlusion values below the Occlusion Threshold will be brought up to the threshold. To completely disable, leave this off and reduce the threshold to 0."/>
+                                    <CheckBox Name="chkClampOcclusion" Content="Lerp Occlusion From Threshold" IsChecked="True" Margin="0,0,0,5" ToolTip="Occlusion values will be rescaled from {0 - 1}, to {Occlusion Threshold - 1}. This has the effect of lightening the darker areas without removing them. When this is off, any occlusion values below the Occlusion Threshold will be brought up to the threshold. To completely disable, leave this off and reduce the threshold to 0."/>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>

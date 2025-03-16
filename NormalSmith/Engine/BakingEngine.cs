@@ -535,12 +535,7 @@ namespace NormalSmith.Engine
                                     }
 
                                     float occ = unoccluded / (float)sampleCountLocal;
-                                    float finalOcc = clampOcclusion
-                                        ? Math.Max(occ, occlusionThreshold)
-                                        : occ < occlusionThreshold
-                                            ? Lerp(occ, occlusionThreshold,
-                                                (1 - occ / occlusionThreshold) * (1 - occ / occlusionThreshold))
-                                            : occ;
+                                    float finalOcc = clampOcclusion ? Math.Max(occ, occlusionThreshold) : occlusionThreshold + occ * (1 - occlusionThreshold);
                                     int gray = (int)Math.Clamp(finalOcc * 255, 0, 255);
                                     occColor = (255 << 24) | (gray << 16) | (gray << 8) | gray;
 
@@ -614,12 +609,7 @@ namespace NormalSmith.Engine
                                     }
 
                                     float occ = unoccluded / (float)sampleCountLocal;
-                                    float finalOcc = clampOcclusion
-                                        ? Math.Max(occ, occlusionThreshold)
-                                        : occ < occlusionThreshold
-                                            ? Lerp(occ, occlusionThreshold,
-                                                (1 - occ / occlusionThreshold) * (1 - occ / occlusionThreshold))
-                                            : occ;
+                                    float finalOcc = clampOcclusion ? Math.Max(occ, occlusionThreshold) : occlusionThreshold + occ * (1 - occlusionThreshold);
                                     int gray = (int)Math.Clamp(finalOcc * 255, 0, 255);
                                     int occColor = (255 << 24) | (gray << 16) | (gray << 8) | gray;
 
