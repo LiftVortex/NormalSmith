@@ -164,11 +164,17 @@ namespace NormalSmith.DataStructure
             Vector3 v2,
             out float t)
         {
-            const float epsilon = 1e-6f;
             t = 0f;
 
             Vector3 edge1 = v1 - v0;
             Vector3 edge2 = v2 - v0;
+            // Compute a local scale factor using the average edge length of the triangle
+            float len1 = edge1.Length();
+            float len2 = (v2 - v1).Length();
+            float len3 = (v0 - v2).Length();
+            float avgEdgeLength = (len1 + len2 + len3) / 3f;
+            float epsilon = avgEdgeLength * 1e-6f; // Scaled epsilon based on triangle size
+
             Vector3 h = Vector3.Cross(direction, edge2);
 
             float a = Vector3.Dot(edge1, h);
@@ -192,9 +198,9 @@ namespace NormalSmith.DataStructure
                 t = dist;
                 return true;
             }
-
             return false;
         }
+
 
         /// <summary>
         /// Computes the signed area of a triangle using the cross product.

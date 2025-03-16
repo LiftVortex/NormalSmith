@@ -14,6 +14,32 @@ namespace NormalSmith.HelperFunctions
     {
         public static bool AllowBackFacing { get; set; } = false;
         private static float[] currentOffsets = { 0.25f, 0.75f };
+        // Add the following enum definition inside the NormalSmith.HelperFunctions namespace.
+        public enum PixelTriangleOrientation
+        {
+            NotInside,
+            FrontFacing,
+            BackFacing
+        }
+
+        // Add the helper function inside the AARasterizer class, after the EdgeFunction method.
+        public static PixelTriangleOrientation GetPixelTriangleOrientation(PointF p0, PointF p1, PointF p2, PointF samplePoint)
+        {
+            float w0 = EdgeFunction(p1, p2, samplePoint);
+            float w1 = EdgeFunction(p2, p0, samplePoint);
+            float w2 = EdgeFunction(p0, p1, samplePoint);
+
+            bool frontFacing = (w0 >= 0 && w1 >= 0 && w2 >= 0);
+            bool backFacing = (w0 <= 0 && w1 <= 0 && w2 <= 0);
+
+            if (frontFacing)
+                return PixelTriangleOrientation.FrontFacing;
+            else if (backFacing)
+                return PixelTriangleOrientation.BackFacing;
+            else
+                return PixelTriangleOrientation.NotInside;
+        }
+
         public static void SetSubSampleCount(int aaSamples)
         {
             // If user chooses 1 => single sample at 0.5
@@ -54,8 +80,15 @@ namespace NormalSmith.HelperFunctions
             int y1 = Math.Min(height, (int)MathF.Ceiling(maxY));
 
             float area = EdgeFunction(p0, p1, p2);
-            if (MathF.Abs(area) < 1e-8f)
+            // Compute average edge length (Euclidean distance) for the triangle in screen space
+            float e1 = MathF.Sqrt((p1.X - p0.X) * (p1.X - p0.X) + (p1.Y - p0.Y) * (p1.Y - p0.Y));
+            float e2 = MathF.Sqrt((p2.X - p1.X) * (p2.X - p1.X) + (p2.Y - p1.Y) * (p2.Y - p1.Y));
+            float e3 = MathF.Sqrt((p0.X - p2.X) * (p0.X - p2.X) + (p0.Y - p2.Y) * (p0.Y - p2.Y));
+            float avgEdge = (e1 + e2 + e3) / 3f;
+            float areaEpsilon = avgEdge * avgEdge * 1e-6f; // Scaled threshold based on average edge length
+            if (MathF.Abs(area) < areaEpsilon)
                 return; // Degenerate triangle => skip
+
 
             for (int y = y0; y < y1; y++)
             {
@@ -75,7 +108,10 @@ namespace NormalSmith.HelperFunctions
                             float w1 = EdgeFunction(p2, p0, new PointF(sampleX, sampleY));
                             float w2 = EdgeFunction(p0, p1, new PointF(sampleX, sampleY));
 
-                            if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (AllowBackFacing && (w0 <= 0 && w1 <= 0 && w2 <= 0)))
+                            // Determine if the sample is backfacing.
+                            bool isBackFacing = (w0 <= 0 && w1 <= 0 && w2 <= 0);
+
+                            if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (AllowBackFacing && isBackFacing))
                             {
                                 float invArea = 1f / area;
                                 float alpha = w0 * invArea;
@@ -84,29 +120,40 @@ namespace NormalSmith.HelperFunctions
 
                                 Vector3 bary = new Vector3(alpha, beta, gamma);
 
-                                // If you do p0.X = uv0.X*width, p0.Y=(1-uv0.Y)*height,
-                                // you might invert that here. For simplicity, do:
                                 float u = alpha * p0.X + beta * p1.X + gamma * p2.X;
                                 float v = alpha * p0.Y + beta * p1.Y + gamma * p2.Y;
-
                                 float uvX = u / width;
                                 float uvY = 1f - (v / height);
-
                                 PointF uvInterp = new PointF(uvX, uvY);
 
                                 int color = sampleFunc(x, y, bary, uvInterp);
 
-                                byte A = (byte)(color >> 24 & 0xFF);
-                                byte R = (byte)(color >> 16 & 0xFF);
-                                byte G = (byte)(color >> 8 & 0xFF);
-                                byte B = (byte)(color & 0xFF);
+                                // If the sample is backfacing, invert only its green channel.
+                                if (isBackFacing)
+                                {
+                                    byte A = (byte)((color >> 24) & 0xFF);
+                                    byte R = (byte)((color >> 16) & 0xFF);
+                                    byte G = (byte)((color >> 8) & 0xFF);
+                                    byte B = (byte)(color & 0xFF);
 
-                                totalA += A;
-                                totalR += R;
-                                totalG += G;
-                                totalB += B;
+                                    // Invert the green channel.
+                                    G = (byte)(255 - G);
+
+                                    color = (A << 24) | (R << 16) | (G << 8) | B;
+                                }
+
+                                byte a = (byte)(color >> 24 & 0xFF);
+                                byte r = (byte)(color >> 16 & 0xFF);
+                                byte g = (byte)(color >> 8 & 0xFF);
+                                byte b = (byte)(color & 0xFF);
+
+                                totalA += a;
+                                totalR += r;
+                                totalG += g;
+                                totalB += b;
                                 sampleCount++;
                             }
+
                         }
                     }
 
@@ -155,8 +202,15 @@ namespace NormalSmith.HelperFunctions
             int y1 = Math.Min(height, (int)MathF.Ceiling(maxY));
 
             float area = EdgeFunction(p0, p1, p2);
-            if (MathF.Abs(area) < 1e-8f)
-                return;
+            // Compute average edge length (Euclidean distance) for the triangle in screen space
+            float e1 = MathF.Sqrt((p1.X - p0.X) * (p1.X - p0.X) + (p1.Y - p0.Y) * (p1.Y - p0.Y));
+            float e2 = MathF.Sqrt((p2.X - p1.X) * (p2.X - p1.X) + (p2.Y - p1.Y) * (p2.Y - p1.Y));
+            float e3 = MathF.Sqrt((p0.X - p2.X) * (p0.X - p2.X) + (p0.Y - p2.Y) * (p0.Y - p2.Y));
+            float avgEdge = (e1 + e2 + e3) / 3f;
+            float areaEpsilon = avgEdge * avgEdge * 1e-6f; // Scaled threshold based on average edge length
+            if (MathF.Abs(area) < areaEpsilon)
+                return; // Degenerate triangle => skip
+
 
             for (int y = y0; y < y1; y++)
             {
