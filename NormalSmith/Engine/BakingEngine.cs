@@ -1,22 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Drawing.Imaging;
+﻿using System.Drawing.Imaging;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media.Imaging;
 using Assimp;
-using System.Drawing;
 using System.Runtime.CompilerServices;
 using NumericsMatrix = System.Numerics.Matrix4x4;
 using NormalSmith.DataStructure;
 using NormalSmith.HelperFunctions;
-using System.Windows.Forms;
-using System.Windows.Media;
 using System.Diagnostics;
 using System.Collections.Concurrent;
 
