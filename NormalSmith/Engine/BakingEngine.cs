@@ -103,7 +103,7 @@ namespace NormalSmith.Engine
             Action<Bitmap> updatePreview,
             Action<string> updateTitle,
             Action<Action> invokeOnDispatcher,
-            int supersampleFactor, int uvPadding)
+            int supersampleFactor, int uvPadding, bool recalcTangents)
         {
             return await Task.Run(() =>
             {
@@ -281,6 +281,7 @@ namespace NormalSmith.Engine
                         vertexBitangents[i] = Vector3.Normalize(new Vector3(worldBiT.X, worldBiT.Y, worldBiT.Z));
                     }
                 }
+
 
                 // Set up progress tracking and preview updates.
                 int processedTriangles = 0;
@@ -549,14 +550,21 @@ namespace NormalSmith.Engine
                                     }
                                     if (useTangentSpace)
                                     {
+                                        // Normalize the interpolated tangent and normal
                                         Vector3 T = Vector3.Normalize(interpTangent);
-                                        Vector3 N = interpNormal;
+                                        Vector3 N = Vector3.Normalize(interpNormal);
+
+                                        // Compute bitangent from N and T and re-orthogonalize T with respect to N
                                         Vector3 B = Vector3.Normalize(Vector3.Cross(N, T));
+                                        T = Vector3.Normalize(Vector3.Cross(B, N));
+
+                                        // Transform the raw bent vector into the recalculated tangent space
                                         rawBent = new Vector3(
                                             Vector3.Dot(rawBent, T),
                                             Vector3.Dot(rawBent, B),
                                             Vector3.Dot(rawBent, N));
                                     }
+
                                     bentColor = ColorToInt(rawBent, swizzle);
                                     // Do not write directly to bentBuffer/occBuffer here.
                                 });
@@ -588,11 +596,8 @@ namespace NormalSmith.Engine
                                     Vector3 sumDir = Vector3.Zero;
                                     Random rand = threadRandom.Value;
                                     Vector3 interpTangent = Vector3.Zero;
-                                    if (baseMesh.HasTangentBasis)
-                                    {
-                                        interpTangent = Vector3.Normalize(
+                                    interpTangent = Vector3.Normalize(
                                             bary.X * tan0 + bary.Y * tan1 + bary.Z * tan2);
-                                    }
 
                                     for (int s = 0; s < sampleCountLocal; s++)
                                     {
@@ -623,14 +628,21 @@ namespace NormalSmith.Engine
                                     }
                                     if (useTangentSpace)
                                     {
+                                        // Normalize the interpolated tangent and normal
                                         Vector3 T = Vector3.Normalize(interpTangent);
-                                        Vector3 N = interpNormal;
+                                        Vector3 N = Vector3.Normalize(interpNormal);
+
+                                        // Compute bitangent from N and T and re-orthogonalize T with respect to N
                                         Vector3 B = Vector3.Normalize(Vector3.Cross(N, T));
+                                        T = Vector3.Normalize(Vector3.Cross(B, N));
+
+                                        // Transform the raw bent vector into the recalculated tangent space
                                         rawBent = new Vector3(
                                             Vector3.Dot(rawBent, T),
                                             Vector3.Dot(rawBent, B),
                                             Vector3.Dot(rawBent, N));
                                     }
+
                                     int colorInt = generateOcclusionMap && !generateBentNormalMap
                                         ? occColor
                                         : ColorToInt(rawBent, swizzle);

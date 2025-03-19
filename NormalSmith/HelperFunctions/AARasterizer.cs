@@ -137,7 +137,7 @@ namespace NormalSmith.HelperFunctions
                                     byte B = (byte)(color & 0xFF);
 
                                     // Invert the green channel.
-                                    G = (byte)(255 - G);
+                                    //G = (byte)(255 - G);
 
                                     color = (A << 24) | (R << 16) | (G << 8) | B;
                                 }

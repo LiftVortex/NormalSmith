@@ -877,7 +877,8 @@ namespace NormalSmith
                     title => this.Title = title,
                     action => Dispatcher.Invoke(action),
                     supersampleFactor,
-                    uvPadding
+                    uvPadding,
+                    false
                 );
 
                 BakeResult bakeResult = await currentBakingTask;
