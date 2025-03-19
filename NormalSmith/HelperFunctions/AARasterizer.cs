@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Drawing;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace NormalSmith.HelperFunctions
 {
@@ -23,6 +24,7 @@ namespace NormalSmith.HelperFunctions
         }
 
         // Add the helper function inside the AARasterizer class, after the EdgeFunction method.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static PixelTriangleOrientation GetPixelTriangleOrientation(PointF p0, PointF p1, PointF p2, PointF samplePoint)
         {
             float w0 = EdgeFunction(p1, p2, samplePoint);
@@ -39,6 +41,7 @@ namespace NormalSmith.HelperFunctions
             else
                 return PixelTriangleOrientation.NotInside;
         }
+
 
         public static void SetSubSampleCount(int aaSamples)
         {
@@ -303,9 +306,11 @@ namespace NormalSmith.HelperFunctions
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float EdgeFunction(PointF a, PointF b, PointF c)
         {
             return (c.X - a.X) * (b.Y - a.Y) - (c.Y - a.Y) * (b.X - a.X);
         }
+
     }
 }

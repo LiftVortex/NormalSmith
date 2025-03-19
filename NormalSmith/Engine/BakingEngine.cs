@@ -11,14 +11,14 @@ using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using Assimp;
 using System.Drawing;
-
-// Alias to resolve ambiguity between Assimp and System.Numerics:
+using System.Runtime.CompilerServices;
 using NumericsMatrix = System.Numerics.Matrix4x4;
 using NormalSmith.DataStructure;
 using NormalSmith.HelperFunctions;
 using System.Windows.Forms;
 using System.Windows.Media;
 using System.Diagnostics;
+using System.Collections.Concurrent;
 
 namespace NormalSmith.Engine
 {
@@ -305,359 +305,467 @@ namespace NormalSmith.Engine
                 // At the beginning of the Task.Run delegate, declare a lock object:
                 object previewBmpLock = new object();
 
-                // Start a timer to periodically update the UI and compute ETA.
-                var previewTimer = new System.Threading.Timer(_ =>
+                bool enablePreviewUpdates = true;
+
+                System.Threading.Timer previewTimer = null;
+                if (enablePreviewUpdates)
                 {
-                    // Wrap the entire timer callback in a lock to prevent overlapping accesses.
-                    lock (previewBmpLock)
+                    // Start a timer to periodically update the UI and compute ETA.
+                    previewTimer = new System.Threading.Timer(_ =>
                     {
-                        // 1) Measure how many triangles were processed since last time
-                        DateTime now = DateTime.UtcNow;
-                        TimeSpan interval = now - lastCheckTime;
-
-                        // The total number of triangles processed so far:
-                        int currentProcessed = Interlocked.CompareExchange(ref processedTriangles, 0, 0);
-                        // Triangles processed *this* interval:
-                        int processedThisInterval = currentProcessed - lastProcessedTriangles;
-
-                        // Update smoothed throughput (items/sec)
-                        if (processedThisInterval > 0 && interval.TotalSeconds > 0)
+                        // Wrap the entire timer callback in a lock to prevent overlapping accesses.
+                        lock (previewBmpLock)
                         {
-                            double rawThroughput = processedThisInterval / interval.TotalSeconds;
-                            if (smoothedThroughput < 1e-6)
-                            {
-                                // First measurement
-                                smoothedThroughput = rawThroughput;
-                            }
-                            else
-                            {
-                                // Exponential smoothing
-                                smoothedThroughput = smoothingFactor * smoothedThroughput + (1.0 - smoothingFactor) * rawThroughput;
-                            }
-                        }
-                        // 2) Compute fraction of work done (0 to 1)
-                        double fractionComplete = (double)currentProcessed / totalTriangles;
-                        // Update "last check" for the next callback
-                        lastProcessedTriangles = currentProcessed;
-                        lastCheckTime = now;
+                            // 1) Measure how many triangles were processed since last time
+                            DateTime now = DateTime.UtcNow;
+                            TimeSpan interval = now - lastCheckTime;
 
-                        if(fractionComplete < 1)
-                        {
+                            // The total number of triangles processed so far:
+                            int currentProcessed = Interlocked.CompareExchange(ref processedTriangles, 0, 0);
+                            // Triangles processed *this* interval:
+                            int processedThisInterval = currentProcessed - lastProcessedTriangles;
 
-                            // 3) Compute an ETA string (if needed)
-                            string remainingTimeText = "";
-                            if (fractionComplete >= 0.1 && fractionComplete < 1.0 && smoothedThroughput > 0.01)
+                            // Update smoothed throughput (items/sec)
+                            if (processedThisInterval > 0 && interval.TotalSeconds > 0)
                             {
-                                int itemsLeft = totalTriangles - currentProcessed;
-                                double secondsLeft = itemsLeft / smoothedThroughput;
-                                TimeSpan newEta = TimeSpan.FromSeconds(secondsLeft);
-                                // Optionally, assign a formatted string to remainingTimeText.
-                            }
-
-                            float progressMultiplier = 1;
-
-                            if(uvPadding > 0)
-                            {
-                                progressMultiplier = 0.9f;
-                            }
-                            
-                            fractionComplete = fractionComplete * progressMultiplier;
-                            progress.Report(fractionComplete);
-                            // 4) Update title with progress and ETA
-
-                            invokeOnDispatcher(() =>
-                            {
-                                if (!token.IsCancellationRequested)
+                                double rawThroughput = processedThisInterval / interval.TotalSeconds;
+                                if (smoothedThroughput < 1e-6)
                                 {
-                                    updateTitle($"Baking... {fractionComplete:P0} {remainingTimeText}");
+                                    // First measurement
+                                    smoothedThroughput = rawThroughput;
                                 }
                                 else
                                 {
-                                    Debug.WriteLine("Still Baking");
-                                }
-                            });
-                        }
-
-                        // 5) Provide a preview image to the UI 
-                        // Note: All bitmap access is inside the lock.
-                        // Single-mode: update preview bitmap using unsafe code for memory copy.
-                        if (!dualMode)
-                        {
-                            // Lock the preview bitmap.
-                            var bmpData = previewBmp.LockBits(
-                                new Rectangle(0, 0, width, height),
-                                ImageLockMode.WriteOnly,
-                                previewBmp.PixelFormat);
-
-                            unsafe
-                            {
-                                // Pin the managed buffer.
-                                fixed (int* src = singleBuffer)
-                                {
-                                    // Copy the entire buffer in one go.
-                                    Buffer.MemoryCopy(
-                                        src,
-                                        bmpData.Scan0.ToPointer(),
-                                        singleBuffer.Length * sizeof(int),  // destination size in bytes
-                                        singleBuffer.Length * sizeof(int)); // number of bytes to copy
+                                    // Exponential smoothing
+                                    smoothedThroughput = smoothingFactor * smoothedThroughput + (1.0 - smoothingFactor) * rawThroughput;
                                 }
                             }
+                            // 2) Compute fraction of work done (0 to 1)
+                            double fractionComplete = (double)currentProcessed / totalTriangles;
+                            // Update "last check" for the next callback
+                            lastProcessedTriangles = currentProcessed;
+                            lastCheckTime = now;
 
-                            previewBmp.UnlockBits(bmpData);
-
-                            // Downscale the high resolution previewBmp using the nearest neighbor algorithm
-                            Bitmap downscaledPreview = NearestNeighborDownscale(previewBmp, 1024, 1024);
-
-                            // Dispatch the updated bitmap to the UI.
-                            invokeOnDispatcher(() => updatePreview(downscaledPreview));
-                        }
-                        else
-                        {
-                            // Dual-mode: update preview using the bentBuffer.
-                            var bmpData = previewBmp.LockBits(
-                                new Rectangle(0, 0, width, height),
-                                ImageLockMode.WriteOnly,
-                                previewBmp.PixelFormat);
-
-                            unsafe
+                            if (fractionComplete < 1)
                             {
-                                fixed (int* src = bentBuffer)
+
+                                // 3) Compute an ETA string (if needed)
+                                string remainingTimeText = "";
+                                if (fractionComplete >= 0.1 && fractionComplete < 1.0 && smoothedThroughput > 0.01)
                                 {
-                                    Buffer.MemoryCopy(
-                                        src,
-                                        bmpData.Scan0.ToPointer(),
-                                        bentBuffer.Length * sizeof(int),
-                                        bentBuffer.Length * sizeof(int));
+                                    int itemsLeft = totalTriangles - currentProcessed;
+                                    double secondsLeft = itemsLeft / smoothedThroughput;
+                                    TimeSpan newEta = TimeSpan.FromSeconds(secondsLeft);
+                                    // Optionally, assign a formatted string to remainingTimeText.
                                 }
+
+                                float progressMultiplier = 1;
+
+                                if (uvPadding > 0)
+                                {
+                                    progressMultiplier = 0.9f;
+                                }
+
+                                fractionComplete = fractionComplete * progressMultiplier;
+                                progress.Report(fractionComplete);
+                                // 4) Update title with progress and ETA
+
+                                invokeOnDispatcher(() =>
+                                {
+                                    if (!token.IsCancellationRequested)
+                                    {
+                                        updateTitle($"Baking... {fractionComplete:P0} {remainingTimeText}");
+                                    }
+                                    else
+                                    {
+                                        Debug.WriteLine("Still Baking");
+                                    }
+                                });
                             }
 
-                            previewBmp.UnlockBits(bmpData);
+                            // 5) Provide a preview image to the UI 
+                            // Note: All bitmap access is inside the lock.
+                            // Single-mode: update preview bitmap using unsafe code for memory copy.
+                            if (!dualMode)
+                            {
+                                // Lock the preview bitmap.
+                                var bmpData = previewBmp.LockBits(
+                                    new Rectangle(0, 0, width, height),
+                                    ImageLockMode.WriteOnly,
+                                    previewBmp.PixelFormat);
 
-                            // Downscale the high resolution previewBmp using the nearest neighbor algorithm
-                            Bitmap downscaledPreview = NearestNeighborDownscale(previewBmp, 1024, 1024);
+                                unsafe
+                                {
+                                    // Pin the managed buffer.
+                                    fixed (int* src = singleBuffer)
+                                    {
+                                        // Copy the entire buffer in one go.
+                                        Buffer.MemoryCopy(
+                                            src,
+                                            bmpData.Scan0.ToPointer(),
+                                            singleBuffer.Length * sizeof(int),  // destination size in bytes
+                                            singleBuffer.Length * sizeof(int)); // number of bytes to copy
+                                    }
+                                }
 
-                            // Dispatch the downscaled preview to the UI.
-                            invokeOnDispatcher(() => updatePreview(downscaledPreview));
+                                previewBmp.UnlockBits(bmpData);
 
-                        }
+                                // Downscale the high resolution previewBmp using the nearest neighbor algorithm
+                                Bitmap downscaledPreview = NearestNeighborDownscale(previewBmp, 1024, 1024);
 
-                    } // End of lock (previewBmpLock)
-                },
-                null,
-                previewInterval,  // due time
-                previewInterval   // period
-                );
+                                // Dispatch the updated bitmap to the UI.
+                                invokeOnDispatcher(() => updatePreview(downscaledPreview));
+                            }
+                            else
+                            {
+                                // Dual-mode: update preview using the bentBuffer.
+                                var bmpData = previewBmp.LockBits(
+                                    new Rectangle(0, 0, width, height),
+                                    ImageLockMode.WriteOnly,
+                                    previewBmp.PixelFormat);
+
+                                unsafe
+                                {
+                                    fixed (int* src = bentBuffer)
+                                    {
+                                        Buffer.MemoryCopy(
+                                            src,
+                                            bmpData.Scan0.ToPointer(),
+                                            bentBuffer.Length * sizeof(int),
+                                            bentBuffer.Length * sizeof(int));
+                                    }
+                                }
+
+                                previewBmp.UnlockBits(bmpData);
+
+                                // Downscale the high resolution previewBmp using the nearest neighbor algorithm
+                                Bitmap downscaledPreview = NearestNeighborDownscale(previewBmp, 1024, 1024);
+
+                                // Dispatch the downscaled preview to the UI.
+                                invokeOnDispatcher(() => updatePreview(downscaledPreview));
+
+                            }
+
+                        } // End of lock (previewBmpLock)
+                    },
+                    null,
+                    previewInterval,  // due time
+                    previewInterval   // period
+                    );
+                }
 
                 try
                 {
-                    // Process each triangle in parallel.
-                    Parallel.For(0, totalTriangles, new ParallelOptions
+                    int minWorker, minIOC;
+                    ThreadPool.GetMinThreads(out minWorker, out minIOC);
+                    ThreadPool.SetMinThreads(Environment.ProcessorCount * 2, minIOC); // or a higher multiplier if needed
+
+                    // Calculate a very small chunk size.
+                    // You can experiment with the multiplier; here we use 16.
+                    int chunkSize = totalTriangles / (Environment.ProcessorCount * 16);
+                    if (chunkSize < 1)
+                        chunkSize = 1;
+
+                    var rangePartitioner = Partitioner.Create(0, totalTriangles, chunkSize);
+
+                    Parallel.ForEach(rangePartitioner, new ParallelOptions
                     {
                         CancellationToken = token,
-                        MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 2)
-                    },
-                    triIndex =>
+                        MaxDegreeOfParallelism = Environment.ProcessorCount
+                    }, range =>
                     {
-                        token.ThrowIfCancellationRequested();
-                        Face face = baseMesh.Faces[triIndex];
-                        if (face.IndexCount != 3)
+                        for (int triIndex = range.Item1; triIndex < range.Item2; triIndex++)
                         {
-                            Interlocked.Increment(ref processedTriangles);
-                            return;
-                        }
+                            token.ThrowIfCancellationRequested();
+                            Face face = baseMesh.Faces[triIndex];
+                            if (face.IndexCount != 3)
+                            {
+                                Interlocked.Increment(ref processedTriangles);
+                                return;
+                            }
 
-                        int i0 = face.Indices[0];
-                        int i1 = face.Indices[1];
-                        int i2 = face.Indices[2];
+                            int i0 = face.Indices[0];
+                            int i1 = face.Indices[1];
+                            int i2 = face.Indices[2];
 
-                        PointF uv0 = new PointF(bentUVChannelMap[i0].X, bentUVChannelMap[i0].Y);
-                        PointF uv1 = new PointF(bentUVChannelMap[i1].X, bentUVChannelMap[i1].Y);
-                        PointF uv2 = new PointF(bentUVChannelMap[i2].X, bentUVChannelMap[i2].Y);
-                        PointF p0 = new PointF(uv0.X * width, (1 - uv0.Y) * height);
-                        PointF p1 = new PointF(uv1.X * width, (1 - uv1.Y) * height);
-                        PointF p2 = new PointF(uv2.X * width, (1 - uv2.Y) * height);
+                            PointF uv0 = new PointF(bentUVChannelMap[i0].X, bentUVChannelMap[i0].Y);
+                            PointF uv1 = new PointF(bentUVChannelMap[i1].X, bentUVChannelMap[i1].Y);
+                            PointF uv2 = new PointF(bentUVChannelMap[i2].X, bentUVChannelMap[i2].Y);
+                            PointF p0 = new PointF(uv0.X * width, (1 - uv0.Y) * height);
+                            PointF p1 = new PointF(uv1.X * width, (1 - uv1.Y) * height);
+                            PointF p2 = new PointF(uv2.X * width, (1 - uv2.Y) * height);
 
-                        Vector3 pos0 = vertexPositions[i0];
-                        Vector3 pos1 = vertexPositions[i1];
-                        Vector3 pos2 = vertexPositions[i2];
+                            Vector3 pos0 = vertexPositions[i0];
+                            Vector3 pos1 = vertexPositions[i1];
+                            Vector3 pos2 = vertexPositions[i2];
 
-                        Vector3 nor0 = vertexNormals[i0];
-                        Vector3 nor1 = vertexNormals[i1];
-                        Vector3 nor2 = vertexNormals[i2];
+                            Vector3 nor0 = vertexNormals[i0];
+                            Vector3 nor1 = vertexNormals[i1];
+                            Vector3 nor2 = vertexNormals[i2];
 
-                        Vector3 tan0 = baseMesh.HasTangentBasis ? vertexTangents[i0] : Vector3.Zero;
-                        Vector3 tan1 = baseMesh.HasTangentBasis ? vertexTangents[i1] : Vector3.Zero;
-                        Vector3 tan2 = baseMesh.HasTangentBasis ? vertexTangents[i2] : Vector3.Zero;
+                            Vector3 tan0 = baseMesh.HasTangentBasis ? vertexTangents[i0] : Vector3.Zero;
+                            Vector3 tan1 = baseMesh.HasTangentBasis ? vertexTangents[i1] : Vector3.Zero;
+                            Vector3 tan2 = baseMesh.HasTangentBasis ? vertexTangents[i2] : Vector3.Zero;
 
-                        // Depending on dual-mode, we rasterize and compute differently.
-                        if (dualMode)
-                        {
-                            int currentIsland = triangleIsland[triIndex];
+                            // Depending on dual-mode, we rasterize and compute differently.
+                            if (dualMode)
+                            {
+                                int currentIsland = triangleIsland[triIndex];
 
-                            AARasterizer.RasterizeTriangleToDualBufferAA(
-                                bentBuffer,
-                                occBuffer,
-                                width,
-                                height,
-                                p0,
-                                p1,
-                                p2,
-                                (int x, int y, Vector3 bary, PointF uvInterp, out int bentColor, out int occColor) =>
-                                {
-                                    // Record the island ID for this pixel.
-                                    int index = x + y * width;
-                                    islandBuffer[index] = currentIsland;
-
-                                    Vector3 interpNormal = Vector3.Normalize(
-                                        bary.X * nor0 + bary.Y * nor1 + bary.Z * nor2);
-                                    Vector3 posInterp = bary.X * pos0 + bary.Y * pos1 + bary.Z * pos2;
-                                    Vector3 origin = posInterp + interpNormal * rayOriginBias;
-
-                                    int sampleCountLocal = raySampleCount;
-                                    float maxDistanceLocal = maxRayDistance;
-                                    int unoccluded = 0;
-                                    Vector3 sumDir = Vector3.Zero;
-                                    Random rand = threadRandom.Value;
-                                    Vector3 interpTangent = Vector3.Normalize(
-                                        bary.X * tan0 + bary.Y * tan1 + bary.Z * tan2);
-
-                                    for (int s = 0; s < sampleCountLocal; s++)
+                                AARasterizer.RasterizeTriangleToDualBufferAA(
+                                    bentBuffer,
+                                    occBuffer,
+                                    width,
+                                    height,
+                                    p0,
+                                    p1,
+                                    p2,
+                                    (int x, int y, Vector3 bary, PointF uvInterp, out int bentColor, out int occColor) =>
                                     {
-                                        Vector3 sampleDir = GenerateSampleDirection(
-                                            rand, interpNormal, interpTangent,
-                                            useCosineDistribution, useEnhancedTangentProcessing);
-                                        float? tHit = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir, maxDistanceLocal, sampleAlpha);
-                                        bool blocked = tHit.HasValue && tHit.Value < maxDistanceLocal;
-                                        if (!blocked)
-                                        {
-                                            unoccluded++;
-                                            sumDir += sampleDir;
-                                        }
-                                    }
+                                        // Record the island ID for this pixel.
+                                        int index = x + y * width;
+                                        islandBuffer[index] = currentIsland;
 
-                                    float occ = unoccluded / (float)sampleCountLocal;
-                                    float finalOcc = clampOcclusion ? Math.Max(occ, occlusionThreshold) : occlusionThreshold + occ * (1 - occlusionThreshold);
-                                    int gray = (int)Math.Clamp(finalOcc * 255, 0, 255);
-                                    occColor = (255 << 24) | (gray << 16) | (gray << 8) | gray;
+                                        Vector3 interpNormal = Vector3.Normalize(
+                                            bary.X * nor0 + bary.Y * nor1 + bary.Z * nor2);
+                                        Vector3 posInterp = bary.X * pos0 + bary.Y * pos1 + bary.Z * pos2;
+                                        Vector3 origin = posInterp + interpNormal * rayOriginBias;
 
-                                    float blendT = unoccluded / (float)sampleCountLocal;
-                                    Vector3 rawBent = unoccluded > 0
-                                        ? Vector3.Normalize(sumDir)
-                                        : interpNormal;
-                                    if (useEnhancedTangentProcessing)
-                                    {
-                                        rawBent = Vector3.Normalize(Vector3.Lerp(interpNormal, rawBent, blendT));
-                                    }
-                                    if (useTangentSpace)
-                                    {
-                                        // Normalize the interpolated tangent and normal
-                                        Vector3 T = Vector3.Normalize(interpTangent);
-                                        Vector3 N = Vector3.Normalize(interpNormal);
-
-                                        // Compute bitangent from N and T and re-orthogonalize T with respect to N
-                                        Vector3 B = Vector3.Normalize(Vector3.Cross(N, T));
-                                        T = Vector3.Normalize(Vector3.Cross(B, N));
-
-                                        // Transform the raw bent vector into the recalculated tangent space
-                                        rawBent = new Vector3(
-                                            Vector3.Dot(rawBent, T),
-                                            Vector3.Dot(rawBent, B),
-                                            Vector3.Dot(rawBent, N));
-                                    }
-
-                                    bentColor = ColorToInt(rawBent, swizzle);
-                                    // Do not write directly to bentBuffer/occBuffer here.
-                                });
-                        }
-                        else
-                        {
-                            int currentIsland = triangleIsland[triIndex];
-
-                            AARasterizer.RasterizeTriangleToBufferAA(
-                                singleBuffer,
-                                width,
-                                height,
-                                p0,
-                                p1,
-                                p2,
-                                (x, y, bary, uvInterp) =>
-                                {
-                                    int index = x + y * width;
-                                    islandBuffer[index] = currentIsland;
-
-                                    Vector3 interpNormal = Vector3.Normalize(
-                                        bary.X * nor0 + bary.Y * nor1 + bary.Z * nor2);
-                                    Vector3 posInterp = bary.X * pos0 + bary.Y * pos1 + bary.Z * pos2;
-                                    Vector3 origin = posInterp + interpNormal * rayOriginBias;
-
-                                    int sampleCountLocal = raySampleCount;
-                                    float maxDistanceLocal = maxRayDistance;
-                                    int unoccluded = 0;
-                                    Vector3 sumDir = Vector3.Zero;
-                                    Random rand = threadRandom.Value;
-                                    Vector3 interpTangent = Vector3.Zero;
-                                    interpTangent = Vector3.Normalize(
+                                        int sampleCountLocal = raySampleCount;
+                                        float maxDistanceLocal = maxRayDistance;
+                                        int unoccluded = 0;
+                                        Vector3 sumDir = Vector3.Zero;
+                                        Random rand = threadRandom.Value;
+                                        Vector3 interpTangent = Vector3.Normalize(
                                             bary.X * tan0 + bary.Y * tan1 + bary.Z * tan2);
 
-                                    for (int s = 0; s < sampleCountLocal; s++)
-                                    {
-                                        Vector3 sampleDir = GenerateSampleDirection(
-                                            rand, interpNormal, interpTangent,
-                                            useCosineDistribution, useEnhancedTangentProcessing);
-                                        float? tHit = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir, maxDistanceLocal, sampleAlpha);
-                                        bool blocked = tHit.HasValue && tHit.Value < maxDistanceLocal;
-                                        if (!blocked)
+                                        // Cache invariants that do not change during the inner loop.
+                                        bool useCosine = useCosineDistribution;
+                                        bool enhanced = useEnhancedTangentProcessing;
+                                        float mDistance = maxDistanceLocal; // Cache max distance
+
+                                        int s = 0;
+                                        int unrollFactor = 4;
+                                        for (; s <= sampleCountLocal - unrollFactor; s += unrollFactor)
                                         {
-                                            unoccluded++;
-                                            sumDir += sampleDir;
+                                            // Unroll four iterations manually, using the cached invariant values.
+                                            Vector3 sampleDir0 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit0 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir0, mDistance, sampleAlpha);
+                                            bool blocked0 = tHit0.HasValue && tHit0.Value < mDistance;
+
+                                            Vector3 sampleDir1 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit1 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir1, mDistance, sampleAlpha);
+                                            bool blocked1 = tHit1.HasValue && tHit1.Value < mDistance;
+
+                                            Vector3 sampleDir2 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit2 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir2, mDistance, sampleAlpha);
+                                            bool blocked2 = tHit2.HasValue && tHit2.Value < mDistance;
+
+                                            Vector3 sampleDir3 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit3 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir3, mDistance, sampleAlpha);
+                                            bool blocked3 = tHit3.HasValue && tHit3.Value < mDistance;
+
+                                            if (!blocked0)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir0;
+                                            }
+                                            if (!blocked1)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir1;
+                                            }
+                                            if (!blocked2)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir2;
+                                            }
+                                            if (!blocked3)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir3;
+                                            }
                                         }
-                                    }
+                                        for (; s < sampleCountLocal; s++)
+                                        {
+                                            Vector3 sampleDir = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir, mDistance, sampleAlpha);
+                                            bool blocked = tHit.HasValue && tHit.Value < mDistance;
+                                            if (!blocked)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir;
+                                            }
+                                        }
 
-                                    float occ = unoccluded / (float)sampleCountLocal;
-                                    float finalOcc = clampOcclusion ? Math.Max(occ, occlusionThreshold) : occlusionThreshold + occ * (1 - occlusionThreshold);
-                                    int gray = (int)Math.Clamp(finalOcc * 255, 0, 255);
-                                    int occColor = (255 << 24) | (gray << 16) | (gray << 8) | gray;
+                                        float occ = unoccluded / (float)sampleCountLocal;
+                                        float finalOcc = clampOcclusion ? Math.Max(occ, occlusionThreshold) : occlusionThreshold + occ * (1 - occlusionThreshold);
+                                        int gray = (int)Math.Clamp(finalOcc * 255, 0, 255);
+                                        occColor = (255 << 24) | (gray << 16) | (gray << 8) | gray;
 
-                                    float blendT = unoccluded / (float)sampleCountLocal;
-                                    Vector3 rawBent = unoccluded > 0
-                                        ? Vector3.Normalize(sumDir)
-                                        : interpNormal;
-                                    if (useEnhancedTangentProcessing)
+                                        float blendT = unoccluded / (float)sampleCountLocal;
+                                        Vector3 rawBent = unoccluded > 0
+                                            ? Vector3.Normalize(sumDir)
+                                            : interpNormal;
+                                        if (useEnhancedTangentProcessing)
+                                        {
+                                            rawBent = Vector3.Normalize(Vector3.Lerp(interpNormal, rawBent, blendT));
+                                        }
+                                        if (useTangentSpace)
+                                        {
+                                            // Normalize the interpolated tangent and normal
+                                            Vector3 T = Vector3.Normalize(interpTangent);
+                                            Vector3 N = Vector3.Normalize(interpNormal);
+
+                                            // Compute bitangent from N and T and re-orthogonalize T with respect to N
+                                            Vector3 B = Vector3.Normalize(Vector3.Cross(N, T));
+                                            T = Vector3.Normalize(Vector3.Cross(B, N));
+
+                                            // Transform the raw bent vector into the recalculated tangent space
+                                            rawBent = new Vector3(
+                                                Vector3.Dot(rawBent, T),
+                                                Vector3.Dot(rawBent, B),
+                                                Vector3.Dot(rawBent, N));
+                                        }
+
+                                        bentColor = ColorToInt(rawBent, swizzle);
+                                        // Do not write directly to bentBuffer/occBuffer here.
+                                    });
+                            }
+                            else
+                            {
+                                int currentIsland = triangleIsland[triIndex];
+
+                                AARasterizer.RasterizeTriangleToBufferAA(
+                                    singleBuffer,
+                                    width,
+                                    height,
+                                    p0,
+                                    p1,
+                                    p2,
+                                    (x, y, bary, uvInterp) =>
                                     {
-                                        rawBent = Vector3.Normalize(Vector3.Lerp(interpNormal, rawBent, blendT));
-                                    }
-                                    if (useTangentSpace)
-                                    {
-                                        // Normalize the interpolated tangent and normal
-                                        Vector3 T = Vector3.Normalize(interpTangent);
-                                        Vector3 N = Vector3.Normalize(interpNormal);
+                                        int index = x + y * width;
+                                        islandBuffer[index] = currentIsland;
 
-                                        // Compute bitangent from N and T and re-orthogonalize T with respect to N
-                                        Vector3 B = Vector3.Normalize(Vector3.Cross(N, T));
-                                        T = Vector3.Normalize(Vector3.Cross(B, N));
+                                        Vector3 interpNormal = Vector3.Normalize(
+                                            bary.X * nor0 + bary.Y * nor1 + bary.Z * nor2);
+                                        Vector3 posInterp = bary.X * pos0 + bary.Y * pos1 + bary.Z * pos2;
+                                        Vector3 origin = posInterp + interpNormal * rayOriginBias;
 
-                                        // Transform the raw bent vector into the recalculated tangent space
-                                        rawBent = new Vector3(
-                                            Vector3.Dot(rawBent, T),
-                                            Vector3.Dot(rawBent, B),
-                                            Vector3.Dot(rawBent, N));
-                                    }
+                                        int sampleCountLocal = raySampleCount;
+                                        float maxDistanceLocal = maxRayDistance;
+                                        int unoccluded = 0;
+                                        Vector3 sumDir = Vector3.Zero;
+                                        Random rand = threadRandom.Value;
+                                        Vector3 interpTangent = Vector3.Zero;
+                                        interpTangent = Vector3.Normalize(
+                                                bary.X * tan0 + bary.Y * tan1 + bary.Z * tan2);
 
-                                    int colorInt = generateOcclusionMap && !generateBentNormalMap
-                                        ? occColor
-                                        : ColorToInt(rawBent, swizzle);
-                                    return colorInt;
-                                });
+                                        // Cache invariants that do not change during the inner loop.
+                                        bool useCosine = useCosineDistribution;
+                                        bool enhanced = useEnhancedTangentProcessing;
+                                        float mDistance = maxDistanceLocal; // Cache max distance
+
+                                        int s = 0;
+                                        int unrollFactor = 4;
+                                        for (; s <= sampleCountLocal - unrollFactor; s += unrollFactor)
+                                        {
+                                            // Unroll four iterations manually, using the cached invariant values.
+                                            Vector3 sampleDir0 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit0 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir0, mDistance, sampleAlpha);
+                                            bool blocked0 = tHit0.HasValue && tHit0.Value < mDistance;
+
+                                            Vector3 sampleDir1 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit1 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir1, mDistance, sampleAlpha);
+                                            bool blocked1 = tHit1.HasValue && tHit1.Value < mDistance;
+
+                                            Vector3 sampleDir2 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit2 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir2, mDistance, sampleAlpha);
+                                            bool blocked2 = tHit2.HasValue && tHit2.Value < mDistance;
+
+                                            Vector3 sampleDir3 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit3 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir3, mDistance, sampleAlpha);
+                                            bool blocked3 = tHit3.HasValue && tHit3.Value < mDistance;
+
+                                            if (!blocked0)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir0;
+                                            }
+                                            if (!blocked1)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir1;
+                                            }
+                                            if (!blocked2)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir2;
+                                            }
+                                            if (!blocked3)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir3;
+                                            }
+                                        }
+                                        for (; s < sampleCountLocal; s++)
+                                        {
+                                            Vector3 sampleDir = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir, mDistance, sampleAlpha);
+                                            bool blocked = tHit.HasValue && tHit.Value < mDistance;
+                                            if (!blocked)
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir;
+                                            }
+                                        }
+
+                                        float occ = unoccluded / (float)sampleCountLocal;
+                                        float finalOcc = clampOcclusion ? Math.Max(occ, occlusionThreshold) : occlusionThreshold + occ * (1 - occlusionThreshold);
+                                        int gray = (int)Math.Clamp(finalOcc * 255, 0, 255);
+                                        int occColor = (255 << 24) | (gray << 16) | (gray << 8) | gray;
+
+                                        float blendT = unoccluded / (float)sampleCountLocal;
+                                        Vector3 rawBent = unoccluded > 0
+                                            ? Vector3.Normalize(sumDir)
+                                            : interpNormal;
+                                        if (useEnhancedTangentProcessing)
+                                        {
+                                            rawBent = Vector3.Normalize(Vector3.Lerp(interpNormal, rawBent, blendT));
+                                        }
+                                        if (useTangentSpace)
+                                        {
+                                            // Normalize the interpolated tangent and normal
+                                            Vector3 T = Vector3.Normalize(interpTangent);
+                                            Vector3 N = Vector3.Normalize(interpNormal);
+
+                                            // Compute bitangent from N and T and re-orthogonalize T with respect to N
+                                            Vector3 B = Vector3.Normalize(Vector3.Cross(N, T));
+                                            T = Vector3.Normalize(Vector3.Cross(B, N));
+
+                                            // Transform the raw bent vector into the recalculated tangent space
+                                            rawBent = new Vector3(
+                                                Vector3.Dot(rawBent, T),
+                                                Vector3.Dot(rawBent, B),
+                                                Vector3.Dot(rawBent, N));
+                                        }
+
+                                        int colorInt = generateOcclusionMap && !generateBentNormalMap
+                                            ? occColor
+                                            : ColorToInt(rawBent, swizzle);
+                                        return colorInt;
+                                    });
+                            }
+
+                            Interlocked.Increment(ref processedTriangles);
                         }
-
-                        Interlocked.Increment(ref processedTriangles);
-
                     });
                 }
                 finally
                 {
                     // Dispose preview timer and restore title if canceled.
-                    previewTimer.Dispose();
+                    previewTimer?.Dispose();
                     invokeOnDispatcher(() =>
                     {
                         if (token.IsCancellationRequested)
@@ -668,7 +776,7 @@ namespace NormalSmith.Engine
                 }
 
                 progress.Report(1);
-                previewTimer.Dispose();
+                previewTimer?.Dispose();
                 progress.Report(1);
 
                 // After processing, create the high-resolution bitmap:
@@ -957,7 +1065,12 @@ namespace NormalSmith.Engine
         #endregion
 
         #region Helper Methods
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector3 GenerateSampleDirectionInline(Random rand, Vector3 normal, Vector3 tangent, bool useCosine, bool enhanced)
+        {
+            // This simply wraps the existing function; ensure GenerateSampleDirection is accessible.
+            return GenerateSampleDirection(rand, normal, tangent, useCosine, enhanced);
+        }
         private static Bitmap NearestNeighborDownscale(Bitmap source, int newWidth, int newHeight)
         {
             // Create the destination bitmap with the target dimensions.
@@ -1318,14 +1431,17 @@ namespace NormalSmith.Engine
         /// <summary>
         /// Performs a linear interpolation between a and b by factor t.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float Lerp(float a, float b, float t)
         {
             return a + (b - a) * t;
         }
 
+
         /// <summary>
         /// Converts a normal vector in the -1..1 range to an ARGB int, applying a swizzle factor.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int ColorToInt(Vector3 normal, Vector3 swizzle)
         {
             normal.X *= swizzle.X;
@@ -1335,13 +1451,14 @@ namespace NormalSmith.Engine
             int r = (int)Math.Clamp((normal.X * 0.5f + 0.5f) * 255, 0, 255);
             int g = (int)Math.Clamp((normal.Y * 0.5f + 0.5f) * 255, 0, 255);
             int b = (int)Math.Clamp((normal.Z * 0.5f + 0.5f) * 255, 0, 255);
-            return 255 << 24 | r << 16 | g << 8 | b;
+            return (255 << 24) | (r << 16) | (g << 8) | b;
         }
 
         /// <summary>
         /// Generates a sample direction for ray casting. Supports both cosine-weighted and uniform hemisphere sampling.
         /// Optionally applies an enhanced tangent approach for better blending.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector3 GenerateSampleDirection(
             Random rand,
             Vector3 normal,
@@ -1412,6 +1529,7 @@ namespace NormalSmith.Engine
                 }
             }
         }
+
 
         /// <summary>
         /// Deletes a GDI object by pointer, used after converting a System.Drawing.Bitmap to a WPF BitmapSource.
