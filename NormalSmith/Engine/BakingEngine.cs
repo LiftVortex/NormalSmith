@@ -54,8 +54,10 @@ namespace NormalSmith.Engine
         /// <summary>
         /// A thread-local random number generator used during parallel baking to avoid contention.
         /// </summary>
-        public static readonly ThreadLocal<Random> threadRandom =
-            new ThreadLocal<Random>(() => new Random(Guid.NewGuid().GetHashCode()));
+        // Use a thread-local Xorshift to avoid locking:
+        public static ThreadLocal<Xorshift> threadXorshift =
+            new ThreadLocal<Xorshift>(() => new Xorshift((uint)Guid.NewGuid().GetHashCode()));
+
 
         #endregion
 
@@ -531,72 +533,152 @@ namespace NormalSmith.Engine
                                         Vector3 posInterp = bary.X * pos0 + bary.Y * pos1 + bary.Z * pos2;
                                         Vector3 origin = posInterp + interpNormal * rayOriginBias;
 
+                                        /***** MODIFIED SNIPPET *****/
+
+                                        // Gather local references
                                         int sampleCountLocal = raySampleCount;
                                         float maxDistanceLocal = maxRayDistance;
                                         int unoccluded = 0;
                                         Vector3 sumDir = Vector3.Zero;
-                                        Random rand = threadRandom.Value;
+
+                                        // Use our faster Xorshift
+                                        Xorshift rng = threadXorshift.Value;
+
+                                        // For uniform or cosine hemisphere sampling we typically need 2 random floats per sample,
+                                        // so allocate an array for all needed random floats:
+                                        int floatsPerSample = 2;
+                                        int totalNeeded = sampleCountLocal * floatsPerSample;
+
+                                        // Pre-generate the random floats in one batch:
+                                        float[] randomFloats = new float[totalNeeded];
+                                        for (int i = 0; i < totalNeeded; i++)
+                                        {
+                                            randomFloats[i] = rng.NextFloat();
+                                        }
+
                                         Vector3 interpTangent = Vector3.Normalize(
                                             bary.X * tan0 + bary.Y * tan1 + bary.Z * tan2);
 
-                                        // Cache invariants that do not change during the inner loop.
                                         bool useCosine = useCosineDistribution;
                                         bool enhanced = useEnhancedTangentProcessing;
-                                        float mDistance = maxDistanceLocal; // Cache max distance
+                                        float mDistance = maxDistanceLocal;
 
+                                        // We'll unroll in steps of 8. 
+                                        // (Adjust unroll factor to suit your scenario.)
+                                        int unrollFactor = 8;
                                         int s = 0;
-                                        int unrollFactor = 4;
+                                        int randIndex = 0;
+
                                         for (; s <= sampleCountLocal - unrollFactor; s += unrollFactor)
                                         {
-                                            // Unroll four iterations manually, using the cached invariant values.
-                                            Vector3 sampleDir0 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            // For each of the 8 samples, pull 2 floats from randomFloats:
+                                            //  (u, v) pairs for hemisphere sampling
+
+                                            // Sample #0
+                                            float u0 = randomFloats[randIndex++];
+                                            float v0 = randomFloats[randIndex++];
+                                            Vector3 sampleDir0 = GenerateSampleDirectionInline(u0, v0, interpNormal, interpTangent, useCosine, enhanced);
                                             float? tHit0 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir0, mDistance, sampleAlpha);
-                                            bool blocked0 = tHit0.HasValue && tHit0.Value < mDistance;
-
-                                            Vector3 sampleDir1 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
-                                            float? tHit1 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir1, mDistance, sampleAlpha);
-                                            bool blocked1 = tHit1.HasValue && tHit1.Value < mDistance;
-
-                                            Vector3 sampleDir2 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
-                                            float? tHit2 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir2, mDistance, sampleAlpha);
-                                            bool blocked2 = tHit2.HasValue && tHit2.Value < mDistance;
-
-                                            Vector3 sampleDir3 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
-                                            float? tHit3 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir3, mDistance, sampleAlpha);
-                                            bool blocked3 = tHit3.HasValue && tHit3.Value < mDistance;
-
-                                            if (!blocked0)
+                                            if (!(tHit0.HasValue && tHit0.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir0;
                                             }
-                                            if (!blocked1)
+
+                                            // Sample #1
+                                            float u1 = randomFloats[randIndex++];
+                                            float v1 = randomFloats[randIndex++];
+                                            Vector3 sampleDir1 = GenerateSampleDirectionInline(u1, v1, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit1 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir1, mDistance, sampleAlpha);
+                                            if (!(tHit1.HasValue && tHit1.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir1;
                                             }
-                                            if (!blocked2)
+
+                                            // Sample #2
+                                            float u2 = randomFloats[randIndex++];
+                                            float v2 = randomFloats[randIndex++];
+                                            Vector3 sampleDir2 = GenerateSampleDirectionInline(u2, v2, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit2 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir2, mDistance, sampleAlpha);
+                                            if (!(tHit2.HasValue && tHit2.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir2;
                                             }
-                                            if (!blocked3)
+
+                                            // Sample #3
+                                            float u3 = randomFloats[randIndex++];
+                                            float v3 = randomFloats[randIndex++];
+                                            Vector3 sampleDir3 = GenerateSampleDirectionInline(u3, v3, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit3 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir3, mDistance, sampleAlpha);
+                                            if (!(tHit3.HasValue && tHit3.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir3;
                                             }
+
+                                            // Sample #4
+                                            float u4 = randomFloats[randIndex++];
+                                            float v4 = randomFloats[randIndex++];
+                                            Vector3 sampleDir4 = GenerateSampleDirectionInline(u4, v4, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit4 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir4, mDistance, sampleAlpha);
+                                            if (!(tHit4.HasValue && tHit4.Value < mDistance))
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir4;
+                                            }
+
+                                            // Sample #5
+                                            float u5 = randomFloats[randIndex++];
+                                            float v5 = randomFloats[randIndex++];
+                                            Vector3 sampleDir5 = GenerateSampleDirectionInline(u5, v5, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit5 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir5, mDistance, sampleAlpha);
+                                            if (!(tHit5.HasValue && tHit5.Value < mDistance))
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir5;
+                                            }
+
+                                            // Sample #6
+                                            float u6 = randomFloats[randIndex++];
+                                            float v6 = randomFloats[randIndex++];
+                                            Vector3 sampleDir6 = GenerateSampleDirectionInline(u6, v6, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit6 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir6, mDistance, sampleAlpha);
+                                            if (!(tHit6.HasValue && tHit6.Value < mDistance))
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir6;
+                                            }
+
+                                            // Sample #7
+                                            float u7 = randomFloats[randIndex++];
+                                            float v7 = randomFloats[randIndex++];
+                                            Vector3 sampleDir7 = GenerateSampleDirectionInline(u7, v7, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit7 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir7, mDistance, sampleAlpha);
+                                            if (!(tHit7.HasValue && tHit7.Value < mDistance))
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir7;
+                                            }
                                         }
+
+                                        // Handle leftover samples
                                         for (; s < sampleCountLocal; s++)
                                         {
-                                            Vector3 sampleDir = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float u = randomFloats[randIndex++];
+                                            float v = randomFloats[randIndex++];
+                                            Vector3 sampleDir = GenerateSampleDirectionInline(u, v, interpNormal, interpTangent, useCosine, enhanced);
                                             float? tHit = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir, mDistance, sampleAlpha);
-                                            bool blocked = tHit.HasValue && tHit.Value < mDistance;
-                                            if (!blocked)
+                                            if (!(tHit.HasValue && tHit.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir;
                                             }
                                         }
+
+                                        // Normal or occlusion color logic (same as before)...
+
 
                                         float occ = unoccluded / (float)sampleCountLocal;
                                         float finalOcc = clampOcclusion ? Math.Max(occ, occlusionThreshold) : occlusionThreshold + occ * (1 - occlusionThreshold);
@@ -653,73 +735,152 @@ namespace NormalSmith.Engine
                                         Vector3 posInterp = bary.X * pos0 + bary.Y * pos1 + bary.Z * pos2;
                                         Vector3 origin = posInterp + interpNormal * rayOriginBias;
 
+                                        /***** MODIFIED SNIPPET *****/
+
+                                        // Gather local references
                                         int sampleCountLocal = raySampleCount;
                                         float maxDistanceLocal = maxRayDistance;
                                         int unoccluded = 0;
                                         Vector3 sumDir = Vector3.Zero;
-                                        Random rand = threadRandom.Value;
-                                        Vector3 interpTangent = Vector3.Zero;
-                                        interpTangent = Vector3.Normalize(
-                                                bary.X * tan0 + bary.Y * tan1 + bary.Z * tan2);
 
-                                        // Cache invariants that do not change during the inner loop.
+                                        // Use our faster Xorshift
+                                        Xorshift rng = threadXorshift.Value;
+
+                                        // For uniform or cosine hemisphere sampling we typically need 2 random floats per sample,
+                                        // so allocate an array for all needed random floats:
+                                        int floatsPerSample = 2;
+                                        int totalNeeded = sampleCountLocal * floatsPerSample;
+
+                                        // Pre-generate the random floats in one batch:
+                                        float[] randomFloats = new float[totalNeeded];
+                                        for (int i = 0; i < totalNeeded; i++)
+                                        {
+                                            randomFloats[i] = rng.NextFloat();
+                                        }
+
+                                        Vector3 interpTangent = Vector3.Normalize(
+                                            bary.X * tan0 + bary.Y * tan1 + bary.Z * tan2);
+
                                         bool useCosine = useCosineDistribution;
                                         bool enhanced = useEnhancedTangentProcessing;
-                                        float mDistance = maxDistanceLocal; // Cache max distance
+                                        float mDistance = maxDistanceLocal;
 
+                                        // We'll unroll in steps of 8. 
+                                        // (Adjust unroll factor to suit your scenario.)
+                                        int unrollFactor = 8;
                                         int s = 0;
-                                        int unrollFactor = 4;
+                                        int randIndex = 0;
+
                                         for (; s <= sampleCountLocal - unrollFactor; s += unrollFactor)
                                         {
-                                            // Unroll four iterations manually, using the cached invariant values.
-                                            Vector3 sampleDir0 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            // For each of the 8 samples, pull 2 floats from randomFloats:
+                                            //  (u, v) pairs for hemisphere sampling
+
+                                            // Sample #0
+                                            float u0 = randomFloats[randIndex++];
+                                            float v0 = randomFloats[randIndex++];
+                                            Vector3 sampleDir0 = GenerateSampleDirectionInline(u0, v0, interpNormal, interpTangent, useCosine, enhanced);
                                             float? tHit0 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir0, mDistance, sampleAlpha);
-                                            bool blocked0 = tHit0.HasValue && tHit0.Value < mDistance;
-
-                                            Vector3 sampleDir1 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
-                                            float? tHit1 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir1, mDistance, sampleAlpha);
-                                            bool blocked1 = tHit1.HasValue && tHit1.Value < mDistance;
-
-                                            Vector3 sampleDir2 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
-                                            float? tHit2 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir2, mDistance, sampleAlpha);
-                                            bool blocked2 = tHit2.HasValue && tHit2.Value < mDistance;
-
-                                            Vector3 sampleDir3 = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
-                                            float? tHit3 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir3, mDistance, sampleAlpha);
-                                            bool blocked3 = tHit3.HasValue && tHit3.Value < mDistance;
-
-                                            if (!blocked0)
+                                            if (!(tHit0.HasValue && tHit0.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir0;
                                             }
-                                            if (!blocked1)
+
+                                            // Sample #1
+                                            float u1 = randomFloats[randIndex++];
+                                            float v1 = randomFloats[randIndex++];
+                                            Vector3 sampleDir1 = GenerateSampleDirectionInline(u1, v1, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit1 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir1, mDistance, sampleAlpha);
+                                            if (!(tHit1.HasValue && tHit1.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir1;
                                             }
-                                            if (!blocked2)
+
+                                            // Sample #2
+                                            float u2 = randomFloats[randIndex++];
+                                            float v2 = randomFloats[randIndex++];
+                                            Vector3 sampleDir2 = GenerateSampleDirectionInline(u2, v2, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit2 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir2, mDistance, sampleAlpha);
+                                            if (!(tHit2.HasValue && tHit2.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir2;
                                             }
-                                            if (!blocked3)
+
+                                            // Sample #3
+                                            float u3 = randomFloats[randIndex++];
+                                            float v3 = randomFloats[randIndex++];
+                                            Vector3 sampleDir3 = GenerateSampleDirectionInline(u3, v3, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit3 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir3, mDistance, sampleAlpha);
+                                            if (!(tHit3.HasValue && tHit3.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir3;
                                             }
+
+                                            // Sample #4
+                                            float u4 = randomFloats[randIndex++];
+                                            float v4 = randomFloats[randIndex++];
+                                            Vector3 sampleDir4 = GenerateSampleDirectionInline(u4, v4, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit4 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir4, mDistance, sampleAlpha);
+                                            if (!(tHit4.HasValue && tHit4.Value < mDistance))
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir4;
+                                            }
+
+                                            // Sample #5
+                                            float u5 = randomFloats[randIndex++];
+                                            float v5 = randomFloats[randIndex++];
+                                            Vector3 sampleDir5 = GenerateSampleDirectionInline(u5, v5, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit5 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir5, mDistance, sampleAlpha);
+                                            if (!(tHit5.HasValue && tHit5.Value < mDistance))
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir5;
+                                            }
+
+                                            // Sample #6
+                                            float u6 = randomFloats[randIndex++];
+                                            float v6 = randomFloats[randIndex++];
+                                            Vector3 sampleDir6 = GenerateSampleDirectionInline(u6, v6, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit6 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir6, mDistance, sampleAlpha);
+                                            if (!(tHit6.HasValue && tHit6.Value < mDistance))
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir6;
+                                            }
+
+                                            // Sample #7
+                                            float u7 = randomFloats[randIndex++];
+                                            float v7 = randomFloats[randIndex++];
+                                            Vector3 sampleDir7 = GenerateSampleDirectionInline(u7, v7, interpNormal, interpTangent, useCosine, enhanced);
+                                            float? tHit7 = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir7, mDistance, sampleAlpha);
+                                            if (!(tHit7.HasValue && tHit7.Value < mDistance))
+                                            {
+                                                unoccluded++;
+                                                sumDir += sampleDir7;
+                                            }
                                         }
+
+                                        // Handle leftover samples
                                         for (; s < sampleCountLocal; s++)
                                         {
-                                            Vector3 sampleDir = GenerateSampleDirectionInline(rand, interpNormal, interpTangent, useCosine, enhanced);
+                                            float u = randomFloats[randIndex++];
+                                            float v = randomFloats[randIndex++];
+                                            Vector3 sampleDir = GenerateSampleDirectionInline(u, v, interpNormal, interpTangent, useCosine, enhanced);
                                             float? tHit = bvhRoot.IntersectRayWithAlphaNearest(origin, sampleDir, mDistance, sampleAlpha);
-                                            bool blocked = tHit.HasValue && tHit.Value < mDistance;
-                                            if (!blocked)
+                                            if (!(tHit.HasValue && tHit.Value < mDistance))
                                             {
                                                 unoccluded++;
                                                 sumDir += sampleDir;
                                             }
                                         }
+
+                                        // Normal or occlusion color logic (same as before)...
+
 
                                         float occ = unoccluded / (float)sampleCountLocal;
                                         float finalOcc = clampOcclusion ? Math.Max(occ, occlusionThreshold) : occlusionThreshold + occ * (1 - occlusionThreshold);
@@ -1065,6 +1226,78 @@ namespace NormalSmith.Engine
         #endregion
 
         #region Helper Methods
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector3 GenerateSampleDirectionInline(
+    float u, float v,
+    Vector3 normal,
+    Vector3 tangent,
+    bool useCosine,
+    bool enhancedTangent)
+        {
+            // This is nearly the same as your existing GenerateSampleDirection.
+            // We simply replace the random calls with the parameters `u, v`.
+
+            if (useCosine)
+            {
+                float rVal = MathF.Sqrt(u);
+                float theta = 2 * MathF.PI * v;
+
+                Vector3 N = normal;
+                Vector3 T = tangent;
+                if (enhancedTangent && T.LengthSquared() > 0.0001f)
+                {
+                    Vector3 B = Vector3.Normalize(Vector3.Cross(N, T));
+                    Vector3 sampleLocal = new Vector3(
+                        rVal * MathF.Cos(theta),
+                        rVal * MathF.Sin(theta),
+                        MathF.Sqrt(1 - u) // same as sqrt(1 - ru)
+                    );
+                    return sampleLocal.X * T + sampleLocal.Y * B + sampleLocal.Z * N;
+                }
+                else
+                {
+                    Vector3 helper = MathF.Abs(N.X) > 0.9f ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0);
+                    Vector3 T2 = Vector3.Normalize(Vector3.Cross(helper, N));
+                    Vector3 B2 = Vector3.Normalize(Vector3.Cross(N, T2));
+
+                    Vector3 sampleLocal = new Vector3(
+                        rVal * MathF.Cos(theta),
+                        rVal * MathF.Sin(theta),
+                        MathF.Sqrt(1 - u)
+                    );
+                    return sampleLocal.X * T2 + sampleLocal.Y * B2 + sampleLocal.Z * N;
+                }
+            }
+            else
+            {
+                // uniform hemisphere
+                float phi = 2f * MathF.PI * u;
+                float cosTheta = 1f - 2f * v;
+                float sinTheta = MathF.Sqrt(1f - cosTheta * cosTheta);
+
+                Vector3 sampleLocal = new Vector3(
+                    sinTheta * MathF.Cos(phi),
+                    sinTheta * MathF.Sin(phi),
+                    cosTheta
+                );
+
+                Vector3 N = normal;
+                Vector3 T = tangent;
+                if (enhancedTangent && T.LengthSquared() > 0.0001f)
+                {
+                    Vector3 B = Vector3.Normalize(Vector3.Cross(N, T));
+                    return sampleLocal.X * T + sampleLocal.Y * B + sampleLocal.Z * N;
+                }
+                else
+                {
+                    Vector3 helper = MathF.Abs(N.X) > 0.9f ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0);
+                    Vector3 T2 = Vector3.Normalize(Vector3.Cross(helper, N));
+                    Vector3 B2 = Vector3.Normalize(Vector3.Cross(N, T2));
+                    return sampleLocal.X * T2 + sampleLocal.Y * B2 + sampleLocal.Z * N;
+                }
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector3 GenerateSampleDirectionInline(Random rand, Vector3 normal, Vector3 tangent, bool useCosine, bool enhanced)
         {
