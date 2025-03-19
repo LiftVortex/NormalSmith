@@ -136,6 +136,8 @@ namespace NormalSmith
         /// </summary>
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            WarmUpThreadPool();
+
             this.Title = "Normal Smith v" + newTitle.Remove(newTitle.Length-2);
 
             // Load dark mode preference.
@@ -933,6 +935,29 @@ namespace NormalSmith
         #endregion
 
         #region Utility Methods
+        /// <summary>
+        /// Warms up the ThreadPool by setting the minimum number of threads and running a dummy parallel loop.
+        /// </summary>
+        private void WarmUpThreadPool()
+        {
+            // Retrieve current minimum thread counts.
+            int workerThreads, completionPortThreads;
+            ThreadPool.GetMinThreads(out workerThreads, out completionPortThreads);
+
+            // Set the minimum worker threads to (ProcessorCount * 2) if not already higher.
+            int minWorker = Environment.ProcessorCount * 2;
+            if (workerThreads < minWorker)
+            {
+                ThreadPool.SetMinThreads(minWorker, completionPortThreads);
+            }
+
+            // Run a dummy parallel loop to force the ThreadPool to create the necessary worker threads.
+            Parallel.For(0, minWorker, i =>
+            {
+                // A trivial computation to warm up each thread.
+                double dummy = Math.Sqrt(i);
+            });
+        }
         /// <summary>
         /// Converts a System.Drawing.Bitmap to a WPF BitmapSource.
         /// </summary>
