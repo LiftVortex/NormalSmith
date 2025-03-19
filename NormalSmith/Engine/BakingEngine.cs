@@ -1678,7 +1678,7 @@ namespace NormalSmith.Engine
         private static int ColorToInt(Vector3 normal, Vector3 swizzle)
         {
             normal.X *= swizzle.X;
-            normal.Y *= swizzle.Y;
+            normal.Y *= -swizzle.Y;
             normal.Z *= swizzle.Z;
 
             int r = (int)Math.Clamp((normal.X * 0.5f + 0.5f) * 255, 0, 255);
