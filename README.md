@@ -47,7 +47,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 ## How to Use
 
 1. **Launch the Application:**  
-   Download the compiled Windows executable available in [releases](https://github.com/LiftVortex/NormalSmith/releases/latest).
+   Download the compiled Windows executable available in [releases](https://github.com/Normal-Smith/NormalSmith/releases/latest).
 
 2. **Load a 3D Model:**  
    Click the **Load Model** button to select a 3D model file (`.fbx`). The application will import the model and populate the mesh selection dropdown.
@@ -69,7 +69,7 @@ Normal Smith is a Windows Presentation Foundation (WPF) application written in C
 
 ## Configuration / Settings
 
-The application offers various configuration options, please read the [Wiki](https://github.com/LiftVortex/NormalSmith/wiki/Normal-Smith-Options) page for more details:
+The application offers various configuration options, please read the [Wiki](https://github.com/Normal-Smith/NormalSmith/wiki/Normal-Smith-Options) page for more details:
 
 - **Texture Dimensions:**  
   Set the width and height of the output texture and super sampling factor.
@@ -93,7 +93,7 @@ User settings are saved automatically between sessions.
 
 ## Troubleshooting
 
-If you are having issues, please check the [Troubleshooting](https://github.com/LiftVortex/NormalSmith/wiki/Troubleshooting) page first before submitting an issue on GitHub.
+If you are having issues, please check the [Troubleshooting](https://github.com/Normal-Smith/NormalSmith/wiki/Troubleshooting) page first before submitting an issue on GitHub.
 
 ## Building from Source
 ### Prerequisites
@@ -111,7 +111,7 @@ If you are having issues, please check the [Troubleshooting](https://github.com/
 
 1. **Clone the Repository:**  
     ```
-    git clone https://github.com/LiftVortex/NormalSmith.git
+    git clone https://github.com/Normal-Smith/NormalSmith.git
     cd NormalSmith
     ```
 
@@ -141,11 +141,11 @@ For major changes, please open an issue first to discuss what you would like to 
 
 ## Known Issues / Roadmap
 
-Check the [Issues](https://github.com/LiftVortex/NormalSmith/issues) page for the latest known issues.
+Check the [Issues](https://github.com/Normal-Smith/NormalSmith/issues) page for the latest known issues.
 
 ## License
 
-This project is licensed under the [MIT License](https://github.com/LiftVortex/NormalSmith?tab=MIT-1-ov-file#readme).
+This project is licensed under the [MIT License](https://github.com/Normal-Smith/NormalSmith?tab=MIT-1-ov-file#readme).
 
 ## Acknowledgements / Credits
 
