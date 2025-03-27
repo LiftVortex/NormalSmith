@@ -208,13 +208,14 @@ namespace NormalSmith
                     PostProcessSteps.GenerateUVCoords |
                     PostProcessSteps.CalculateTangentSpace);
 
-                // Populate the mesh dropdown.
                 cmbMeshSelection.Items.Clear();
                 for (int i = 0; i < loadedScene.MeshCount; i++)
                 {
-                    var mesh = loadedScene.Meshes[i];
-                    string meshName = !string.IsNullOrEmpty(mesh.Name) ? mesh.Name : $"Mesh {i}";
-                    cmbMeshSelection.Items.Add(meshName);
+                    // Get the object name from the node hierarchy.
+                    string objectName = GetObjectNameForMesh(loadedScene.RootNode, i);
+                    // If no object name is found, fall back to a default name.
+                    string displayName = !string.IsNullOrEmpty(objectName) ? objectName : $"Mesh {i}";
+                    cmbMeshSelection.Items.Add(displayName);
                 }
                 cmbMeshSelection.SelectedIndex = 0;
                 selectedMeshIndex = 0;
@@ -711,9 +712,11 @@ namespace NormalSmith
                 cmbMeshSelection.Items.Clear();
                 for (int i = 0; i < loadedScene.MeshCount; i++)
                 {
-                    var mesh = loadedScene.Meshes[i];
-                    string meshName = !string.IsNullOrEmpty(mesh.Name) ? mesh.Name : $"Mesh {i}";
-                    cmbMeshSelection.Items.Add(meshName);
+                    // Get the object name from the node hierarchy.
+                    string objectName = GetObjectNameForMesh(loadedScene.RootNode, i);
+                    // If no object name is found, fall back to a default name.
+                    string displayName = !string.IsNullOrEmpty(objectName) ? objectName : $"Mesh {i}";
+                    cmbMeshSelection.Items.Add(displayName);
                 }
                 cmbMeshSelection.SelectedIndex = 0;
                 selectedMeshIndex = 0;
@@ -935,6 +938,21 @@ namespace NormalSmith
         #endregion
 
         #region Utility Methods
+        private string GetObjectNameForMesh(Node node, int meshIndex)
+        {
+            // Check if this node references the mesh.
+            if (node.MeshIndices.Contains(meshIndex))
+                return node.Name;
+
+            // Recursively search children nodes.
+            foreach (var child in node.Children)
+            {
+                string result = GetObjectNameForMesh(child, meshIndex);
+                if (!string.IsNullOrEmpty(result))
+                    return result;
+            }
+            return null;
+        }
         /// <summary>
         /// Warms up the ThreadPool by setting the minimum number of threads and running a dummy parallel loop.
         /// </summary>
