@@ -526,7 +526,7 @@ namespace NormalSmith.Engine
 
                     // Calculate a very small chunk size.
                     // You can experiment with the multiplier; here we use 16.
-                    int chunkSize = totalTriangles / (Environment.ProcessorCount * 16);
+                    int chunkSize = totalTriangles / (Environment.ProcessorCount * 64);
                     if (chunkSize < 1)
                         chunkSize = 1;
 
