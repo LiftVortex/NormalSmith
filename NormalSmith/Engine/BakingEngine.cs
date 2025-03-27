@@ -25,7 +25,7 @@ namespace NormalSmith.Engine
     public static class BakingEngine
     {
         #region Public Properties
-
+        private static object coverageLock = new object();
         /// <summary>
         /// Stores the final bent normal map, if one is generated.
         /// </summary>
@@ -298,6 +298,12 @@ namespace NormalSmith.Engine
 
                 bool enablePreviewUpdates = true;
 
+                // We also need a shared variable to track how much coverage has been processed so far.
+                float[] triangleCoverages = new float[baseMesh.FaceCount];
+                float totalCoverage = 0f;
+                float processedCoverage = 0f;
+                float cov = 0f;
+
                 System.Threading.Timer previewTimer = null;
                 if (enablePreviewUpdates)
                 {
@@ -337,12 +343,14 @@ namespace NormalSmith.Engine
                             lastProcessedTriangles = currentProcessed;
                             lastCheckTime = now;
 
-                            if (fractionComplete < 1)
+                            float fraction = processedCoverage / totalCoverage;
+
+                            if (RoundUp(fraction, 2) < 0.99)
                             {
 
                                 // 3) Compute an ETA string (if needed)
                                 string remainingTimeText = "";
-                                if (fractionComplete >= 0.1 && fractionComplete < 1.0 && smoothedThroughput > 0.01)
+                                if (fraction >= 0.1 && fraction < 1.0 && smoothedThroughput > 0.01)
                                 {
                                     int itemsLeft = totalTriangles - currentProcessed;
                                     double secondsLeft = itemsLeft / smoothedThroughput;
@@ -357,15 +365,16 @@ namespace NormalSmith.Engine
                                     progressMultiplier = 0.9f;
                                 }
 
-                                fractionComplete = fractionComplete * progressMultiplier;
-                                progress.Report(fractionComplete);
+
+                                progress.Report(fraction);
+
                                 // 4) Update title with progress and ETA
 
                                 invokeOnDispatcher(() =>
                                 {
                                     if (!token.IsCancellationRequested)
                                     {
-                                        updateTitle($"Baking... {fractionComplete:P0} {remainingTimeText}");
+                                         updateTitle($"Baking... {fraction:P0}");
                                     }
                                     else
                                     {
@@ -445,6 +454,70 @@ namespace NormalSmith.Engine
                     );
                 }
 
+                // --- ADDED: Precompute triangle coverage ---
+
+                // We'll store coverage in an array, one entry per face.
+                triangleCoverages = new float[baseMesh.FaceCount];
+                totalCoverage = 0f;
+
+                for (int i = 0; i < baseMesh.FaceCount; i++)
+                {
+                    Face face = baseMesh.Faces[i];
+                    if (face.IndexCount != 3)
+                    {
+                        // Degenerate face or non-triangle => zero coverage
+                        triangleCoverages[i] = 0f;
+                        continue;
+                    }
+
+                    int i0 = face.Indices[0];
+                    int i1 = face.Indices[1];
+                    int i2 = face.Indices[2];
+
+                    // Grab the UVs from your chosen bent UV channel
+                    var uv0 = baseMesh.TextureCoordinateChannels[bentUVIndex][i0];
+                    var uv1 = baseMesh.TextureCoordinateChannels[bentUVIndex][i1];
+                    var uv2 = baseMesh.TextureCoordinateChannels[bentUVIndex][i2];
+
+                    // Convert UV to pixel space.
+                    // If your rasterizer uses y= (1 - uv.Y)*height, do the same here.
+                    float x0 = uv0.X * texWidth;
+                    float y0 = (1f - uv0.Y) * texHeight;
+                    float x1 = uv1.X * texWidth;
+                    float y1 = (1f - uv1.Y) * texHeight;
+                    float x2 = uv2.X * texWidth;
+                    float y2 = (1f - uv2.Y) * texHeight;
+
+                    // Compute 2D cross for orientation.
+                    // cross2D < 0 => face is oriented one way, cross2D > 0 => oriented the other way.
+                    // CHANGED: We invert the sign test:
+                    float cross2D = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0);
+                    bool isBackFacing2D = (cross2D > 0f);  // CHANGED from < 0f
+
+                    // If back-facing is not allowed, skip coverage
+                    if (!AARasterizer.AllowBackFacing && isBackFacing2D)
+                    {
+                        triangleCoverages[i] = 0f;
+                        continue;
+                    }
+
+                    // Compute bounding box to approximate coverage
+                    float minX = MathF.Min(x0, MathF.Min(x1, x2));
+                    float minY = MathF.Min(y0, MathF.Min(y1, y2));
+                    float maxX = MathF.Max(x0, MathF.Max(x1, x2));
+                    float maxY = MathF.Max(y0, MathF.Max(y1, y2));
+
+                    float area = (maxX - minX) * (maxY - minY);
+                    if (area < 0f)
+                        area = 0f;  // clamp negative in case of precision
+
+                    triangleCoverages[i] = area;
+                    totalCoverage += area;
+                }
+
+
+
+
                 try
                 {
                     int minWorker, minIOC;
@@ -471,8 +544,12 @@ namespace NormalSmith.Engine
                             Face face = baseMesh.Faces[triIndex];
                             if (face.IndexCount != 3)
                             {
-                                Interlocked.Increment(ref processedTriangles);
-                                return;
+                                cov = triangleCoverages[triIndex];
+                                lock (coverageLock)
+                                {
+                                    processedCoverage += cov;
+                                }
+                                continue;
                             }
 
                             int i0 = face.Indices[0];
@@ -908,7 +985,11 @@ namespace NormalSmith.Engine
                                     });
                             }
 
-                            Interlocked.Increment(ref processedTriangles);
+                            cov = triangleCoverages[triIndex];
+                            lock (coverageLock)
+                            {
+                                processedCoverage += cov;
+                            }
                         }
                     });
                 }
@@ -918,10 +999,7 @@ namespace NormalSmith.Engine
                     previewTimer?.Dispose();
                     invokeOnDispatcher(() =>
                     {
-                        if (token.IsCancellationRequested)
-                        {
-                            updateTitle("Normal Smith");
-                        }
+                        updateTitle("Normal Smith");
                     });
                 }
 
@@ -1215,6 +1293,12 @@ namespace NormalSmith.Engine
         #endregion
 
         #region Helper Methods
+        public static double RoundUp(double value, int decimals)
+        {
+            double multiplier = Math.Pow(10, decimals);
+            return Math.Ceiling(value * multiplier) / multiplier;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector3 GenerateSampleDirectionInline(
     float u, float v,
